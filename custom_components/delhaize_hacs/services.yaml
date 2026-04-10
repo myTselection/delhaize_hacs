@@ -1,0 +1,12 @@
+city_parking_info:
+    name: Get parking info
+    description: Get local parking info
+    fields:
+        origin:
+            name: Origin
+            description: Origin eg 51.330436, 3.802043 or person.fred or zone.home or street, city, country
+            required: True
+            example: zone.home
+            selector:
+              text:
+

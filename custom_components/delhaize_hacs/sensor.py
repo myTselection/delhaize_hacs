@@ -89,7 +89,12 @@ SENSOR_DESCRIPTIONS: tuple[DelhaizeSensorEntityDescription, ...] = (
         name="Personal offers activated",
         icon="mdi:offer",
         value_fn=lambda data: _activated_offers(data),
-        attr_fn=lambda data: _offer_count_attributes(data),
+        attr_fn=lambda data: _without_none(
+            {
+                **_offer_count_attributes(data),
+                "description_list": _activated_offer_description_list(data),
+            }
+        ),
     ),
     DelhaizeSensorEntityDescription(
         key="personal_offers_benefit",
@@ -227,6 +232,35 @@ def _activated_offers(data: dict[str, Any]) -> int | None:
     if offers is not None:
         return sum(1 for offer in offers if offer.get("active") is True)
     return _int_or_none(_nested(data, "personal_offers_count", "activatedCount"))
+
+
+def _activated_offer_description_list(data: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """Return activated personal offer details for sensor attributes."""
+    offers = _visible_personal_offers(data)
+    if offers is None:
+        return None
+    return [
+        _offer_detail(offer)
+        for offer in offers
+        if offer.get("active") is True
+    ]
+
+
+def _offer_detail(offer: dict[str, Any]) -> dict[str, Any]:
+    """Return a structured offer detail."""
+    description = (
+        _clean_label(offer.get("name"))
+        or _clean_label(offer.get("promotion"))
+        or _clean_label(offer.get("promotionId"))
+        or _clean_label(offer.get("id"))
+        or "Personal offer"
+    )
+    return _without_none(
+        {
+            "description": description,
+            "points": _int_or_none(offer.get("points")),
+        }
+    )
 
 
 def _offer_count_attributes(data: dict[str, Any]) -> dict[str, Any]:

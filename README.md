@@ -6,7 +6,7 @@
 
 Home Assistant custom integration for Delhaize SuperPlus, savings, loyalty points, and personal e-Deals.
 
-This integration talks to the same Delhaize GraphQL endpoint used by the website (`https://www.delhaize.be/api/v1/`). It is not affiliated with Delhaize.
+This integration talks to the same Delhaize GraphQL endpoint used by the website (`https://www.delhaize.be/api/v1/`). It is not affiliated with Delhaize. Most of it has been created by ChatGPT Codex.
 
 | :warning: Please do not report integration issues to Delhaize. They will not be able to support this custom component. |
 | -------------------------------------------------------------------------------------------------------------------- |

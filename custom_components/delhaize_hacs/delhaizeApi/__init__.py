@@ -442,19 +442,40 @@ class DelhaizeApi:
         summary["loyalty"] = await self.get_loyalty_details()
         summary["personal_offers_count"] = await self.get_personal_offers_count()
 
-        if auto_activate and self._has_inactive_personal_offers(summary):
-            try:
-                summary["activation_result"] = await self.activate_all_personal_offers()
-                summary["personal_offers_count"] = await self.get_personal_offers_count()
-            except DelhaizeApiError as err:
-                summary["activation_error"] = str(err)
-                _LOGGER.debug("Could not activate Delhaize personal offers: %s", err)
-
         try:
             summary["personal_offers"] = await self.get_personal_offers()
         except DelhaizeApiError as err:
             summary["personal_offers_error"] = str(err)
             _LOGGER.debug("Could not fetch Delhaize personal offer details: %s", err)
+
+        if auto_activate and self._has_inactive_personal_offers(summary):
+            inactive_offers = self._inactive_personal_offers(summary)
+            _LOGGER.debug(
+                "Auto-activating Delhaize personal offers: inactive_count=%s",
+                len(inactive_offers) if inactive_offers else None,
+            )
+            try:
+                summary["activation_result"] = await self.activate_all_personal_offers()
+            except DelhaizeApiError as err:
+                summary["activation_error"] = str(err)
+                _LOGGER.debug("Could not activate Delhaize personal offers: %s", err)
+            else:
+                try:
+                    summary["personal_offers_count"] = await self.get_personal_offers_count()
+                except DelhaizeApiError as err:
+                    summary["activation_refresh_error"] = str(err)
+                    _LOGGER.debug(
+                        "Could not refresh Delhaize personal offer count after activation: %s",
+                        err,
+                    )
+                try:
+                    summary["personal_offers"] = await self.get_personal_offers()
+                except DelhaizeApiError as err:
+                    summary["personal_offers_error"] = str(err)
+                    _LOGGER.debug(
+                        "Could not refresh Delhaize personal offer details after activation: %s",
+                        err,
+                    )
 
         return summary
 
@@ -612,6 +633,13 @@ class DelhaizeApi:
     @staticmethod
     def _has_inactive_personal_offers(summary: dict[str, Any]) -> bool:
         """Return whether the offer count says there are inactive offers."""
+        inactive_offers = DelhaizeApi._inactive_personal_offers(summary)
+        if inactive_offers:
+            return True
+
+        if inactive_offers == []:
+            return False
+
         counts = summary.get("personal_offers_count") or {}
         try:
             total = int(counts.get("totalCount") or 0)
@@ -619,6 +647,21 @@ class DelhaizeApi:
         except (TypeError, ValueError):
             return False
         return total > active
+
+    @staticmethod
+    def _inactive_personal_offers(summary: dict[str, Any]) -> list[dict[str, Any]] | None:
+        """Return inactive personal offers when the detailed offer list is available."""
+        offers = summary.get("personal_offers") or {}
+        offer_list = offers.get("personalOfferList") if isinstance(offers, dict) else None
+        if not isinstance(offer_list, list):
+            return None
+        return [
+            offer
+            for offer in offer_list
+            if isinstance(offer, dict)
+            and offer.get("active") is False
+            and offer.get("offerRedeemed") is not True
+        ]
 
 
 def _error_codes(errors: list[dict[str, Any]]) -> list[str]:

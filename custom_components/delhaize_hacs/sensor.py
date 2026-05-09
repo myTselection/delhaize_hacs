@@ -74,6 +74,7 @@ SENSOR_DESCRIPTIONS: tuple[DelhaizeSensorEntityDescription, ...] = (
                 "activated": _nested(data, "personal_offers_count", "activatedCount"),
                 "activation_result": data.get("activation_result"),
                 "activation_error": data.get("activation_error"),
+                "activation_refresh_error": data.get("activation_refresh_error"),
             }
         ),
     ),

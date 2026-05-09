@@ -84,7 +84,7 @@ SENSOR_DESCRIPTIONS: tuple[DelhaizeSensorEntityDescription, ...] = (
     DelhaizeSensorEntityDescription(
         key="personal_offers_activated",
         name="Personal offers activated",
-        icon="mdi:ticket-check-outline",
+        icon="mdi:offer",
         value_fn=lambda data: _nested(data, "personal_offers_count", "activatedCount"),
     ),
     DelhaizeSensorEntityDescription(

@@ -1,130 +1,123 @@
-"""The shell_recharge integration."""
+"""The Delhaize integration."""
 
 from __future__ import annotations
 
 import logging
+from typing import Any
 
-# import evrecharge
-from .seetyApi import SeetyApi
+import voluptuous as vol
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import (
-    HomeAssistant,
-    ServiceCall,
-    ServiceResponse,
-    SupportsResponse,
-)
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.httpx_client import get_async_client
-from homeassistant.helpers.location import find_coordinates
 
-from .const import DOMAIN, CONF_ORIGIN
-from .coordinator import (
-    CityParkingUserDataUpdateCoordinator,
-    async_find_city_parking_info
-)
-from pywaze.route_calculator import WazeRouteCalculator
-import voluptuous as vol
-from homeassistant.helpers.selector import (
-    BooleanSelector,
-    SelectSelector,
-    SelectSelectorConfig,
-    SelectSelectorMode,
-    TextSelector,
-    TextSelectorConfig,
-    TextSelectorType,
-    NumberSelector,
-)
+from .const import CONF_COOKIE, CONF_LANGUAGE, DEFAULT_LANGUAGE, DOMAIN
+from .coordinator import DelhaizeDataUpdateCoordinator
+from .delhaizeApi import DelhaizeApi, DelhaizeApiError
 
 _LOGGER = logging.getLogger(DOMAIN)
+
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
-SERVICE_CITY_PARKING_INFO = "city_parking_info"
-SERVICE_CITY_PARKING_INFO_SCHEMA = vol.Schema(
+SERVICE_ACTIVATE_PERSONAL_OFFERS = "activate_personal_offers"
+CONF_ENTRY_ID = "entry_id"
+SERVICE_ACTIVATE_PERSONAL_OFFERS_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_ORIGIN): TextSelector()
+        vol.Optional(CONF_ENTRY_ID): str,
     }
 )
 
-async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Migrate old entry."""
-    _LOGGER.debug("Migrating configuration from %s", entry.version)
 
-    if entry.version == 2:
-        new_data = dict(entry.data)
-        new_data["single"] = {"serial_number": new_data.pop("serial_number")}
-    else:
-        return True
-
-    hass.config_entries.async_update_entry(entry, data=new_data, version=3)
-
-    _LOGGER.debug("Migration to configuration version %s successful", entry.version)
-
+async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
+    """Set up the Delhaize integration."""
+    hass.data.setdefault(DOMAIN, {})
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up from a config entry."""
-
+    """Set up Delhaize from a config entry."""
     hass.data.setdefault(DOMAIN, {})
 
-    seetyApi = SeetyApi(websession=async_get_clientsession(hass))
-
-    coordinator: CityParkingUserDataUpdateCoordinator
-    httpx_client = get_async_client(hass)
-    routeCalculatorClient = WazeRouteCalculator(region="EU", client=httpx_client)
-    coordinator = CityParkingUserDataUpdateCoordinator(hass, seetyApi, entry, routeCalculatorClient)
+    api = DelhaizeApi(
+        async_get_clientsession(hass),
+        cookie_header=entry.data.get(CONF_COOKIE),
+        language=entry.data.get(CONF_LANGUAGE, DEFAULT_LANGUAGE),
+    )
+    coordinator = DelhaizeDataUpdateCoordinator(hass, api, entry)
 
     hass.data[DOMAIN][entry.entry_id] = coordinator
     await coordinator.async_config_entry_first_refresh()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-
-    async def async_find_city_parking_info_service(service: ServiceCall) -> ServiceResponse:
-        httpx_client = get_async_client(hass)
-        routeCalculatorClient = WazeRouteCalculator(region="EU", client=httpx_client)
-
-        origin = service.data[CONF_ORIGIN]
-
-
-        response = await async_find_city_parking_info(
-            hass=hass,
-            seetyApi=seetyApi,
-            origin=origin,
-            routeCalculatorClient=routeCalculatorClient
-        )
-        return {"city_parking_info": response}
-
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_CITY_PARKING_INFO,
-        async_find_city_parking_info_service,
-        SERVICE_CITY_PARKING_INFO_SCHEMA,
-        supports_response=SupportsResponse.ONLY,
-    )
+    _register_services(hass)
     return True
 
 
-async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry):
-    try:
-        for platform in PLATFORMS:
-            await hass.config_entries.async_forward_entry_unload(entry, platform)
-            _LOGGER.info("Successfully removed sensor from the integration")
-    except ValueError:
-        pass
-
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    # Flag that a reload is in progress
-    _LOGGER.info("async_remove_entry " + entry.entry_id)
-    hass.data[DOMAIN]["reloading"] = True
+    """Unload a Delhaize config entry."""
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if not unload_ok:
+        return False
 
-    unload_ok: bool = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
-    hass.data[DOMAIN].pop("reloading", None)
+    hass.data[DOMAIN].pop(entry.entry_id, None)
+    _unregister_services_if_unused(hass)
+    return True
 
-    for entry in hass.config_entries.async_entries(DOMAIN):
-        _LOGGER.info("async_unload_entry still set: " + entry.entry_id)
-    for entry in hass.data[DOMAIN].keys():
-        _LOGGER.info("async_unload_entry still set: " + entry)
-    return unload_ok
+
+def _register_services(hass: HomeAssistant) -> None:
+    """Register Delhaize services once."""
+    if hass.data[DOMAIN].get("_service_registered"):
+        return
+
+    async def async_activate_personal_offers_service(service: ServiceCall) -> None:
+        """Activate Delhaize personal offers for one or all entries."""
+        entry_id = service.data.get(CONF_ENTRY_ID)
+        coordinators = _matching_coordinators(hass, entry_id)
+        if not coordinators:
+            raise HomeAssistantError("No Delhaize config entry found")
+
+        for coordinator in coordinators:
+            try:
+                await coordinator.async_activate_personal_offers()
+            except DelhaizeApiError as err:
+                raise HomeAssistantError(
+                    f"Could not activate Delhaize personal offers: {err}"
+                ) from err
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_ACTIVATE_PERSONAL_OFFERS,
+        async_activate_personal_offers_service,
+        SERVICE_ACTIVATE_PERSONAL_OFFERS_SCHEMA,
+    )
+    hass.data[DOMAIN]["_service_registered"] = True
+
+
+def _unregister_services_if_unused(hass: HomeAssistant) -> None:
+    """Unregister services when the last entry is unloaded."""
+    if any(
+        isinstance(value, DelhaizeDataUpdateCoordinator)
+        for value in hass.data[DOMAIN].values()
+    ):
+        return
+
+    if hass.data[DOMAIN].pop("_service_registered", None):
+        hass.services.async_remove(DOMAIN, SERVICE_ACTIVATE_PERSONAL_OFFERS)
+
+
+def _matching_coordinators(
+    hass: HomeAssistant,
+    entry_id: str | None,
+) -> list[DelhaizeDataUpdateCoordinator]:
+    """Return coordinators matching a service call."""
+    if entry_id:
+        coordinator = hass.data[DOMAIN].get(entry_id)
+        return [coordinator] if isinstance(coordinator, DelhaizeDataUpdateCoordinator) else []
+
+    return [
+        value
+        for value in hass.data[DOMAIN].values()
+        if isinstance(value, DelhaizeDataUpdateCoordinator)
+    ]

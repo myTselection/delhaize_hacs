@@ -1,19 +1,19 @@
+"""Compatibility module for Delhaize API helpers."""
+
+from __future__ import annotations
+
+from collections.abc import Awaitable, Callable
 from functools import wraps
-from typing import Callable
+from typing import Any, TypeVar
+
+_T = TypeVar("_T")
 
 
-def retry_on_401(func: Callable):
-    """Decorator to handle 401 errors"""
+def passthrough(func: Callable[..., Awaitable[_T]]) -> Callable[..., Awaitable[_T]]:
+    """Return an async function unchanged while preserving metadata."""
 
     @wraps(func)
-    async def wrapper(self, *args, **kwargs):
-        if not hasattr(self, "cookies"):
-            await self.getSeetyToken()
-        response = await func(self, *args, **kwargs)
-
-        if response.status == 401:
-            await self.getSeetyToken()
-            response = await func(self, *args, **kwargs)
-        return response
+    async def wrapper(*args: Any, **kwargs: Any) -> _T:
+        return await func(*args, **kwargs)
 
     return wrapper

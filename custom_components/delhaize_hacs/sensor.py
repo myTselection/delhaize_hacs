@@ -1,204 +1,204 @@
-"""Sensors for the shell_recharge integration."""
+"""Sensors for the Delhaize integration."""
 
 from __future__ import annotations
 
-import logging
-import typing
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
-# import evrecharge
-import voluptuous as vol
-from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
-# from homeassistant.helpers.entity import RestoreEntity
+from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
-from homeassistant.helpers import entity_platform
-from homeassistant.helpers.entity import DeviceInfo, Entity
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from .seetyApi.models import *
-from homeassistant.util import dt as dt_util
-# from copy import deepcopy
 
-from . import (
-    CityParkingUserDataUpdateCoordinator
+from .const import BASE_URL, CONF_LANGUAGE, DEFAULT_LANGUAGE, DOMAIN, NAME
+from .coordinator import DelhaizeDataUpdateCoordinator
+
+
+@dataclass(frozen=True, kw_only=True)
+class DelhaizeSensorEntityDescription(SensorEntityDescription):
+    """Describe a Delhaize sensor."""
+
+    value_fn: Callable[[dict[str, Any]], Any]
+    attr_fn: Callable[[dict[str, Any]], dict[str, Any]] = lambda data: {}
+
+
+SENSOR_DESCRIPTIONS: tuple[DelhaizeSensorEntityDescription, ...] = (
+    DelhaizeSensorEntityDescription(
+        key="loyalty_points",
+        name="Loyalty points",
+        icon="mdi:star-circle",
+        value_fn=lambda data: _nested(data, "loyalty", "loyaltyPoints", "pointsBalance"),
+        attr_fn=lambda data: _without_none(
+            {
+                "nutriscore_discount": _nested(data, "loyalty", "nutriscoreBalance", "discount"),
+                "nutriscore_available_to_save_this_month": _nested(
+                    data,
+                    "loyalty",
+                    "nutriscoreBalance",
+                    "availableToSaveThisMonth",
+                ),
+                "nutriboost_type": _nested(
+                    data,
+                    "loyalty",
+                    "nutriscoreBalance",
+                    "currentNutriBoostType",
+                ),
+            }
+        ),
+    ),
+    DelhaizeSensorEntityDescription(
+        key="savings",
+        name="Savings",
+        icon="mdi:piggy-bank-outline",
+        value_fn=lambda data: _nested(
+            data,
+            "loyalty",
+            "savings",
+            "periodSavings",
+            "totalSavingsAmountFormatted",
+        ),
+    ),
+    DelhaizeSensorEntityDescription(
+        key="personal_offers_available",
+        name="Personal offers available",
+        icon="mdi:ticket-percent-outline",
+        value_fn=lambda data: _available_offers(data),
+        attr_fn=lambda data: _without_none(
+            {
+                "total": _nested(data, "personal_offers_count", "totalCount"),
+                "activated": _nested(data, "personal_offers_count", "activatedCount"),
+                "activation_result": data.get("activation_result"),
+                "activation_error": data.get("activation_error"),
+            }
+        ),
+    ),
+    DelhaizeSensorEntityDescription(
+        key="personal_offers_total",
+        name="Personal offers total",
+        icon="mdi:ticket-confirmation-outline",
+        value_fn=lambda data: _nested(data, "personal_offers_count", "totalCount"),
+    ),
+    DelhaizeSensorEntityDescription(
+        key="personal_offers_activated",
+        name="Personal offers activated",
+        icon="mdi:ticket-check-outline",
+        value_fn=lambda data: _nested(data, "personal_offers_count", "activatedCount"),
+    ),
+    DelhaizeSensorEntityDescription(
+        key="personal_offers_benefit",
+        name="Personal offers benefit",
+        icon="mdi:currency-eur",
+        value_fn=lambda data: _nested(
+            data,
+            "personal_offers",
+            "totalEuroBenefit",
+            "formattedValue",
+        ),
+        attr_fn=lambda data: _without_none(
+            {
+                "total_points": _nested(data, "personal_offers", "totalPoints"),
+                "benefit_value": _nested(data, "personal_offers", "totalEuroBenefit", "value"),
+                "currency": _nested(data, "personal_offers", "totalEuroBenefit", "currencyIso"),
+                "error": data.get("personal_offers_error"),
+            }
+        ),
+    ),
+    DelhaizeSensorEntityDescription(
+        key="loyalty_profile",
+        name="Loyalty profile",
+        icon="mdi:account-star-outline",
+        value_fn=lambda data: _nested(data, "customer", "ibizaLoyaltyProfile"),
+    ),
+    DelhaizeSensorEntityDescription(
+        key="account",
+        name="Account",
+        icon="mdi:account-circle-outline",
+        value_fn=lambda data: _nested(data, "customer", "customerType"),
+        attr_fn=lambda data: _without_none(
+            {
+                "uid": _nested(data, "customer", "uid"),
+                "customer_id_hash": _nested(data, "customer", "customerIdHash"),
+                "first_name": _nested(data, "customer", "firstName"),
+                "last_name": _nested(data, "customer", "lastName"),
+                "card": _nested(data, "customer", "diplaCard"),
+            }
+        ),
+    ),
 )
-from .const import DOMAIN
-
-_LOGGER = logging.getLogger(DOMAIN)
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up a sensor entry."""
-
-    if not hass.data[DOMAIN].get("_service_registered"):
-        platform = entity_platform.async_get_current_platform()
-        platform.async_register_entity_service(
-            name="toggle_session",
-            schema={
-                vol.Required("card"): str,
-                vol.Required("toggle"): str,
-            },
-            func="toggle_session",
-        )
-        hass.data[DOMAIN]["_service_registered"] = True
-
-    coordinator = hass.data[DOMAIN][entry.entry_id]
-    entities: list[Entity] = []
-
-    if coordinator.data:
-        if isinstance(coordinator, CityParkingUserDataUpdateCoordinator):
-            for parkingSensorType in ParkingSensorType:
-                sensor: SensorEntity = CityParkingSensor(coordinator=coordinator, parkingSensorType=parkingSensorType)
-                entities.append(sensor)
-
-        async_add_entities(entities, True)
-
-async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry):
-    _LOGGER.info("sensor async_remove_entry " + entry.entry_id)
-    try:
-        await hass.config_entries.async_forward_entry_unload(entry, Platform.SENSOR)
-        _LOGGER.info("Successfully removed sensor from the integration")
-    except ValueError:
-        pass
+    """Set up Delhaize sensors."""
+    coordinator: DelhaizeDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
+    async_add_entities(
+        [DelhaizeSensor(coordinator, description) for description in SENSOR_DESCRIPTIONS]
+    )
 
 
-class CityParkingSensor(
-    CoordinatorEntity[CityParkingUserDataUpdateCoordinator],
-    SensorEntity #, RestoreEntity
-):
-    """Main feature of this integration. This sensor represents an EVSE and shows its realtime availability status."""
+class DelhaizeSensor(CoordinatorEntity[DelhaizeDataUpdateCoordinator], SensorEntity):
+    """A Delhaize account sensor."""
+
+    entity_description: DelhaizeSensorEntityDescription
 
     def __init__(
         self,
-        coordinator: CityParkingUserDataUpdateCoordinator,
-        parkingSensorType : ParkingSensorType = ParkingSensorType.ZONE
+        coordinator: DelhaizeDataUpdateCoordinator,
+        description: DelhaizeSensorEntityDescription,
     ) -> None:
-        """Initialize the Sensor."""
+        """Initialize the sensor."""
         super().__init__(coordinator)
-        self.coordinator = coordinator
-        self.parkingSensorType = parkingSensorType
-        self.parkingSensorType_snake = " ".join(word.capitalize() for word in self.parkingSensorType.value.split("_"))  #snake_to_title(self.type.value)
-        self.cityParkingInfo: CityParkingModel = self.coordinator.data
-        self.origin = self.cityParkingInfo.origin
-        # self._start_ts_iso: Optional[str] = None  # persisted ISO string for restoration
-        
-        # self._attr_name = f"{operator} {self.station.address.streetAndNumber} {self.station.address.city}{' ' + self.station.address.country if hasattr(self.station.address, "country") else ''}"
-        # self._attr_name = self.station.name
-        self._attr_name = f"Parking {self.origin} {self.parkingSensorType_snake}"
-        self._attr_has_entity_name = False
-        self._device_unique_id =  f"Parking {self.origin}"
-        self._attr_unique_id = f"{self._device_unique_id}_{parkingSensorType.value}"
-        # store device_unique_id for device_info
-        self._attr_attribution = "seety.co"
-        self._attr_device_class = SensorDeviceClass.ENUM
-        self._attr_native_unit_of_measurement = None
-        self._attr_state_class = None
-        # if hasattr(self.station, "ownerName") and self.station.ownerName:
-        #     operator = self.station.ownerName
-        # else:
-        #     operator = self.station.owner.name
-        operator = "seety.co"
+        self.entity_description = description
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{description.key}"
+        self._attr_attribution = "Data provided by delhaize.be"
+        self._attr_has_entity_name = True
         self._attr_device_info = DeviceInfo(
-            name=self._device_unique_id,
-            identifiers={(DOMAIN, self._device_unique_id)},
-            entry_type=None,
-            manufacturer=operator,
+            identifiers={(DOMAIN, coordinator.config_entry.entry_id)},
+            name=NAME,
+            manufacturer="Delhaize",
+            configuration_url=(
+                f"{BASE_URL}/{coordinator.config_entry.data.get(CONF_LANGUAGE, DEFAULT_LANGUAGE)}"
+                "/my-account"
+            ),
         )
-        self._read_coordinator_data()
 
-    
-    async def async_will_remove_from_hass(self):
-        """Clean up after entity before removal."""
-        _LOGGER.info("async_will_remove_from_hass " + self.entity_id)
+    @property
+    def native_value(self) -> Any:
+        """Return the sensor value."""
+        return self.entity_description.value_fn(self.coordinator.data or {})
 
-    # async def async_added_to_hass(self):
-    #     await super().async_added_to_hass()
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra sensor attributes."""
+        return self.entity_description.attr_fn(self.coordinator.data or {})
 
-    #     last_state = await self.async_get_last_state()
-    #     restored = last_state.attributes.get("stay_start") if last_state and last_state.attributes else None
-    #     if restored:
-    #         # Update coordinator data so other sensors see the restored start
-    #         await self._push_start_to_coordinator(self.unique_id, restored, last_state)
-        
-    #     # after restoring, refresh your coordinator info into attributes/value
-    #     # and write state so restored attributes are re-exposed/persisted
-    #     self._read_coordinator_data()
-    #     # Ensure HA writes the state with restored attributes
-    #     self.async_write_ha_state()
 
-    # async def _push_start_to_coordinator(self, unique_id: str, start_iso: str) -> None:
-    #     """Make a copy of coordinator.data, inject the restored value, and set it."""
-    #     # Make a shallow/deep copy depending on your data structure
-    #     new_data = deepcopy(self.coordinator.data)
+def _nested(data: dict[str, Any], *path: str) -> Any:
+    """Return a nested value from dict data."""
+    value: Any = data
+    for key in path:
+        if not isinstance(value, dict):
+            return None
+        value = value.get(key)
+    return value
 
-    #     # Example: coordinator.data is a dict mapping unique_id -> CityParkingModel-like dict
-    #     # If your data is a custom model, convert to serializable dict or construct a new model instance
-    #     if isinstance(new_data, dict):
-    #         item = dict(new_data.get(unique_id, {}))
-    #         item_extra = dict(item.get("extra_data", {}))
-    #         item_extra["stay_start"] = start_iso
-    #         item["extra_data"] = item_extra
-    #         new_data[unique_id] = item
 
-    #     else:
-    #         # If it's a model object, create a new model instance or set an attribute.
-    #         # Example pseudo-code:
-    #         # cloned_model = new_data.clone()
-    #         # cloned_model.set_stay_start_for(unique_id, start_iso)
-    #         # new_data = cloned_model
-    #         raise NotImplementedError("Adapt to your coordinator.data structure")
+def _available_offers(data: dict[str, Any]) -> int | None:
+    """Return number of inactive personal offers."""
+    total = _nested(data, "personal_offers_count", "totalCount")
+    activated = _nested(data, "personal_offers_count", "activatedCount")
+    try:
+        return max(0, int(total or 0) - int(activated or 0))
+    except (TypeError, ValueError):
+        return None
 
-    #     # Use coordinator API to update data and notify listeners
-    #     await self.coordinator.async_set_updated_data(new_data)
 
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
-        self._read_coordinator_data()
-        # self._attr_name = f"{self.station.name}"
-        self.async_write_ha_state()
-
-    def _read_coordinator_data(self) -> None:
-        """Read data from ev station."""
-        self.cityParkingInfo: CityParkingModel = self.coordinator.data
-        self._attr_extra_state_attributes = self.cityParkingInfo.extra_data if self.cityParkingInfo else {}
-         # expose the stay start timestamp (ISO) so RestoreEntity can persist it
-        self._attr_native_value = self._attr_extra_state_attributes.get(self.parkingSensorType.value, "unknown")
-
-        if self.parkingSensorType.value == ParkingSensorType.TIME.value:
-            self._attr_icon = "mdi:clock-outline"
-            is_hours_active_now = self._attr_extra_state_attributes.get(TIME_RESTRICTION_ACTIVE_NOW, None)
-            if is_hours_active_now is True:
-                self._attr_icon = "mdi:clock-alert"
-        elif self.parkingSensorType.value == ParkingSensorType.PRICE.value:
-            self._attr_icon = "mdi:currency-usd"
-        elif self.parkingSensorType.value == ParkingSensorType.DAYS.value:
-            self._attr_icon = "mdi:calendar"
-            is_days_active_now = self._attr_extra_state_attributes.get(DAY_RESTRICTION_ACTIVE_NOW, None)
-            if is_days_active_now is True:
-                self._attr_icon = "mdi:calendar-alert"
-        elif self.parkingSensorType.value == ParkingSensorType.MAXSTAY.value:
-            self._attr_icon = "mdi:timer-outline"
-            is_max_stay_passed = self._attr_extra_state_attributes.get(MAXSTAY_PASSED_NOW, None)
-            if is_max_stay_passed is True:
-                self._attr_icon = "mdi:timer-alert"
-        elif self.parkingSensorType.value == ParkingSensorType.ZONE.value:
-            self._attr_icon = "mdi:map-marker"
-        elif self.parkingSensorType.value == ParkingSensorType.ADDRESS.value:
-            self._attr_icon = "mdi:home-map-marker"
-        elif self.parkingSensorType.value == ParkingSensorType.REMARKS.value:
-            self._attr_icon = "mdi:note-text"
-        elif self.parkingSensorType.value == ParkingSensorType.TYPE.value:
-            self._attr_icon = "mdi:information-outline"
-        elif self.parkingSensorType.value == ParkingSensorType.RESTRICTION_ACTIVE.value:
-            self._attr_icon = "mdi:alert-circle-check-outline"
-            is_restriction_active = self._attr_extra_state_attributes.get(RESTRICTION_ACTIVE, None)
-            if is_restriction_active is True:
-                self._attr_icon = "mdi:alert-circle-outline"
-        else:
-            self._attr_icon = "mdi:parking"
+def _without_none(data: dict[str, Any]) -> dict[str, Any]:
+    """Drop attributes with unknown values."""
+    return {key: value for key, value in data.items() if value is not None}

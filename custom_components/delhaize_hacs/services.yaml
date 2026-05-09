@@ -1,12 +1,10 @@
-city_parking_info:
-    name: Get parking info
-    description: Get local parking info
-    fields:
-        origin:
-            name: Origin
-            description: Origin eg 51.330436, 3.802043 or person.fred or zone.home or street, city, country
-            required: True
-            example: zone.home
-            selector:
-              text:
-
+activate_personal_offers:
+  name: Activate personal offers
+  description: Activate available Delhaize personal offers for one or all configured accounts.
+  fields:
+    entry_id:
+      name: Config entry
+      description: Optional Delhaize config entry id. Leave empty to activate offers for all configured accounts.
+      required: false
+      selector:
+        text:

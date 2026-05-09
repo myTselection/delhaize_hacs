@@ -1,42 +1,50 @@
 {
   "config": {
     "abort": {
-      "already_configured": "Device is already configured"
+      "already_configured": "This Delhaize account is already configured",
+      "mfa_session_expired": "The Delhaize MFA setup session expired",
+      "reauth_successful": "Delhaize reauthentication was successful",
+      "wrong_account": "The provided Delhaize account does not match this config entry"
     },
     "error": {
-      "cannot_connect": "Failed to connect",
-      "empty_response": "Empty response from shellrecharge.com. Either invalid SERIAL-NUMBER or no data found for it.",
-      "login_failed": "Login failed, please verify email and password are correct.",
-      "missing_data": "Please provide either a serial number or email and password.",
-      "unknown": "Unexpected error"
+      "cannot_connect": "Failed to connect to Delhaize",
+      "captcha_required": "Delhaize requires a captcha. Use a Cookie header from an already logged-in browser session.",
+      "login_failed": "Login failed. Check the credentials or Cookie header.",
+      "mfa_required": "Delhaize requires multi-factor authentication but did not return a usable MFA token.",
+      "missing_auth": "Provide either a Cookie header or both username and password.",
+      "unknown": "Unexpected Delhaize API error"
     },
     "step": {
-      "user": {
-        "sections": {
-          "private": {
-            "data": {
-              "email": "Shell Recharge account e-mail address",
-              "password": "Shell Recharge account password"
-            },
-            "name": "Private charge point"
-          },
-          "public": {
-            "data": {
-              "serial_number": "SERIAL-NUMBER (e.g. 0F80EA26-5F5D-4728-B5E5-268BE55B9191)"
-            },
-            "name": "Public charge point"
-          }
+      "mfa": {
+        "data": {
+          "otp_code": "One-time password"
         },
-        "title": "Configure a public or private charge point"
+        "description": "Enter the one-time password sent by Delhaize.",
+        "title": "Delhaize verification"
+      },
+      "user": {
+        "data": {
+          "auto_activate_offers": "Automatically activate personal offers",
+          "cookie": "Logged-in browser Cookie header",
+          "language": "Language",
+          "password": "Password",
+          "username": "Username or email"
+        },
+        "description": "Use either Delhaize credentials or a Cookie header copied from an already logged-in browser session. Cookie setup is the fallback when Delhaize requires captcha.",
+        "title": "Set up Delhaize"
       }
     }
   },
-  "exceptions": {
-    "invalid_toggle": {
-      "message": "Invalid toggle selected, expected ['start', 'stop']. Got {toggle}"
-    },
-    "session_toggle": {
-      "message": "Could not {toggle} session on {charger} with {rfid}."
+  "services": {
+    "activate_personal_offers": {
+      "description": "Activate available Delhaize personal offers.",
+      "fields": {
+        "entry_id": {
+          "description": "Optional Delhaize config entry id. Leave empty to activate offers for all accounts.",
+          "name": "Config entry"
+        }
+      },
+      "name": "Activate personal offers"
     }
   }
 }

@@ -1,15 +1,7 @@
-"""Models for pydantic parsing."""
+"""Shared typing helpers for Delhaize API responses."""
 
-from pydantic import BaseModel
+from __future__ import annotations
 
-DateTimeISO8601 = str
-from pydantic import BaseModel
+from typing import Any
 
-from typing import List, Literal, Dict, List, Tuple, Any, Optional, Union
-
-
-from datetime import datetime
-
-
-from enum import Enum
-
+DelhaizeData = dict[str, Any]

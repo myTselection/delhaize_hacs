@@ -1,259 +1,607 @@
-"""The API code."""
+"""Delhaize website GraphQL client."""
 
-import logging
-import math
+from __future__ import annotations
 
 from asyncio import CancelledError, TimeoutError
-from typing import Optional
-import math
-
-import pydantic
-from aiohttp import ClientSession
-from aiohttp.client_exceptions import ClientError
-from aiohttp_retry import ExponentialRetry, RetryClient
-from pydantic import ValidationError
-from yarl import URL
-from typing import Optional, Dict, Any
-
-
+from http.cookies import CookieError, SimpleCookie
+import json
 import logging
+from typing import Any
+
+from aiohttp import ClientResponse, ClientSession
+from aiohttp.client_exceptions import ClientError
+
+from ..const import API_URL, BASE_URL, DEFAULT_LANGUAGE
 
 _LOGGER = logging.getLogger(__name__)
 
+LOGIN_MUTATION = """
+mutation Login(
+  $username: String!
+  $password: String!
+  $termsAndConditionsAccepted: Boolean
+  $termsAndConditionsValidation: Boolean
+  $remember: Boolean
+  $prospect_token: String
+  $lang: String
+  $captcha: CaptchaInput
+  $mobile: Boolean
+  $country: String
+) {
+  login(
+    username: $username
+    password: $password
+    termsAndConditionsAccepted: $termsAndConditionsAccepted
+    termsAndConditionsValidation: $termsAndConditionsValidation
+    remember: $remember
+    prospect_token: $prospect_token
+    lang: $lang
+    captcha: $captcha
+    mobile: $mobile
+    country: $country
+  ) {
+    linkedCardFromProspect
+    isLeakedCredentialsDetected
+  }
+  mergeCartAfterLogin: mergeCartAfterLoginV3 {
+    reasonCode
+  }
+}
+"""
+
+LOGIN_WITH_MFA_MUTATION = """
+mutation LoginWithMFA(
+  $otpCode: String!
+  $mfaToken: String!
+  $termsAndConditionsAccepted: Boolean
+  $termsAndConditionsValidation: Boolean
+  $remember: Boolean
+  $lang: String
+  $mobile: Boolean
+  $country: String
+) {
+  login: loginWithMFA(
+    otpCode: $otpCode
+    mfaToken: $mfaToken
+    termsAndConditionsAccepted: $termsAndConditionsAccepted
+    termsAndConditionsValidation: $termsAndConditionsValidation
+    remember: $remember
+    lang: $lang
+    mobile: $mobile
+    country: $country
+  ) {
+    linkedCardFromProspect
+    isLeakedCredentialsDetected
+  }
+  mergeCartAfterLogin: mergeCartAfterLoginV3 {
+    reasonCode
+  }
+}
+"""
+
+SEND_LOGIN_MFA_OTP_MUTATION = """
+mutation SendLoginMfaOtpCode(
+  $mfaPurpose: String!
+  $mfaToken: String!
+  $captcha: CaptchaInput
+  $lang: String
+) {
+  sendMfaOtpCode(
+    mfaPurpose: $mfaPurpose
+    mfaToken: $mfaToken
+    captcha: $captcha
+    lang: $lang
+  ) {
+    mfaMethod
+    nextPossibleSendTime
+    otpTarget
+  }
+}
+"""
+
+DEVICE_ID_QUERY = """
+query DeviceId {
+  deviceId
+}
+"""
+
+REFRESH_CUSTOMER_TOKEN_MUTATION = """
+mutation RefreshCustomerToken {
+  refreshCustomerAuthCookies
+}
+"""
+
+CURRENT_CUSTOMER_QUERY = """
+query CurrentCustomer($mode: String!) {
+  currentCustomer(mode: $mode) {
+    uid
+    customerIdHash
+    firstName
+    lastName
+    customerType
+    diplaCard
+    ibizaLoyaltyProfile
+  }
+}
+"""
+
+IBIZA_ACCOUNT_DETAILS_QUERY = """
+query getIbizaAccountDetails($lang: String) {
+  loyaltyPoints(lang: $lang) {
+    pointsBalance
+  }
+  nutriscoreBalance(lang: $lang) {
+    availableToSaveThisMonth
+    discount
+    currentNutriBoostType
+  }
+  savings: savingsByPeriodV2(lang: $lang) {
+    periodSavings {
+      totalSavingsAmountFormatted
+    }
+  }
+}
+"""
+
+PERSONAL_OFFERS_COUNT_QUERY = """
+query PersonalOffersCount($lang: String!) {
+  personalOffersCount(lang: $lang) {
+    totalCount
+    activatedCount
+  }
+}
+"""
+
+PERSONAL_OFFERS_QUERY = """
+query PersonalOffersV2($lang: String!) {
+  personalOffersV2(lang: $lang) {
+    totalEuroBenefit {
+      formattedValue
+      value
+      currencyIso
+      currencySymbol
+    }
+    totalPoints
+    personalOfferList {
+      id
+      name
+      active
+      points
+      validity
+      promotion
+      promotionId
+      promotionType
+      offerRedeemed
+      basketPromo
+    }
+  }
+}
+"""
+
+ACTIVATE_ALL_PERSONAL_OFFERS_MUTATION = """
+mutation ActivateAllPersonalOffers {
+  activateAllPersonalOffers
+}
+"""
+
+
+class DelhaizeApiError(Exception):
+    """Base error for Delhaize API failures."""
+
+    def __init__(self, message: str, *, errors: list[dict[str, Any]] | None = None) -> None:
+        """Initialize the error."""
+        super().__init__(message)
+        self.errors = errors or []
+
+
+class DelhaizeRequestError(DelhaizeApiError):
+    """Raised when the HTTP request itself failed."""
+
+
+class DelhaizeAuthError(DelhaizeApiError):
+    """Raised when the Delhaize session is not authenticated."""
+
+
+class DelhaizeCaptchaRequired(DelhaizeAuthError):
+    """Raised when Delhaize requires a captcha challenge."""
+
+
+class DelhaizeMfaRequired(DelhaizeAuthError):
+    """Raised when Delhaize requires a one-time password."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        errors: list[dict[str, Any]] | None = None,
+        mfa_token: str | None = None,
+        mfa_purpose: str | None = None,
+    ) -> None:
+        """Initialize the error."""
+        super().__init__(message, errors=errors)
+        self.mfa_token = mfa_token
+        self.mfa_purpose = mfa_purpose
+
+
 class DelhaizeApi:
-    """Class to make API requests."""
-    # store the delhaize user token for reuse in different API calls
-    # the token seems to be valid for a long time and reduces the number of API calls needed to get the token for each request
-    _delhaize_user_token = None
+    """Client for Delhaize website GraphQL operations."""
 
-    def __init__(self, websession: ClientSession):
-        """Initialize the session."""
+    def __init__(
+        self,
+        websession: ClientSession,
+        *,
+        cookie_header: str | None = None,
+        language: str = DEFAULT_LANGUAGE,
+    ) -> None:
+        """Initialize the API client."""
         self.websession = websession
-        self.retry_client = RetryClient(
-            client_session=self.websession,
-            retry_options=ExponentialRetry(attempts=3, start_timeout=5),
-        )
-    def clearDelhaizeUserToken(self):
-        """Clear the cached Delhaize user token."""
-        self._delhaize_user_token = None
-    async def getDelhaizeToken(self) -> DelhaizeUser:
-        if self._delhaize_user_token is not None:
-            _LOGGER.debug("Reusing existing Delhaize user token")
-            return self._delhaize_user_token
-        url = URL(f"https://api.cparkapp.com/user/")
-        header={"Content-Type": "application/json", "App-client": "web", "App-lang": "en", "App-version": "12", "Referer": "https://map.seety.co/", "Origin": "https://map.seety.co"}
-        response = await self.json_post_with_retry_client(url, payload={}, header=header)
+        self.language = language
+        self._cookies: dict[str, str] = {}
+        if cookie_header:
+            self.set_cookie_header(cookie_header)
 
-        if pydantic.version.VERSION.startswith("1"):
-            delhaizeUser = DelhaizeUser.parse_obj(response)
-        else:
-            delhaizeUser = DelhaizeUser.model_validate(response)
+    def set_cookie_header(self, cookie_header: str) -> None:
+        """Import a browser Cookie header into the client cookie jar."""
+        value = cookie_header.strip()
+        if value.lower().startswith("cookie:"):
+            value = value.split(":", 1)[1].strip()
 
-        return delhaizeUser
-    
-
-    async def getAddressForCoordinate(self, coordinates: Coords, delhaizeUser: DelhaizeUser = None) -> DelhaizeLocationResponse:
-        if delhaizeUser is None:
-            delhaizeUser = await self.getDelhaizeToken()
-        url = URL(f"https://api.cparkapp.com/geocode/{coordinates.lat}/{coordinates.lon}")
-        header={"Content-Type": "application/json", "App-client": "web", "App-lang": "en", "App-version": "12", "auth-token": delhaizeUser.access_token, "Referer": "https://map.seety.co/", "Origin": "https://map.seety.co"}
-        response = await self.json_get_with_retry_client(url, header=header)
-
-        if pydantic.version.VERSION.startswith("1"):
-            delhaizeLocationInfo = DelhaizeLocationResponse.parse_obj(response)
-        else:
-            delhaizeLocationInfo = DelhaizeLocationResponse.model_validate(response)
-
-        return delhaizeLocationInfo
-
-    async def getAddressSeetyInfo(self, coordinates: Coords, seetyUser: SeetyUser = None, seetyLocationInfo: SeetyLocationResponse = None) -> CityParkingModel:
-        if seetyUser is None:
-            seetyUser = await self.getSeetyToken()
-        if seetyLocationInfo is None:
-            seetyLocationInfo = await self.getAddressForCoordinate(coordinates, seetyUser)
-        formatted_address = self.get_street_address(seetyLocationInfo)
-        if not formatted_address:
-            raise ValidationError("No street address found for the given coordinates")
-        url = URL(f"https://api.cparkapp.com/street/rules/{formatted_address}/{coordinates.lat}/{coordinates.lon}")
-        header={"Content-Type": "application/json", "App-client": "web", "App-lang": "en", "App-version": "12", "auth-token": seetyUser.access_token, "Referer": "https://map.seety.co/", "Origin": "https://map.seety.co"}
-        response = await self.json_get_with_retry_client(url, header=header)
-        
-        if pydantic.version.VERSION.startswith("1"):
-            seetyStreetRules = SeetyStreetRules.parse_obj(response)
-        else:
-            seetyStreetRules = SeetyStreetRules.model_validate(response)
-
-        
-        url = URL(f"https://api.cparkapp.com/street/complete/{formatted_address}/{coordinates.lat}/{coordinates.lon}")
-        responseComplete = await self.json_get_with_retry_client(url, header=header)
-        
-        if pydantic.version.VERSION.startswith("1"):
-            seetyStreetComplete = SeetyStreetComplete.parse_obj(responseComplete)
-        else:
-            seetyStreetComplete = SeetyStreetComplete.model_validate(responseComplete)
-
-        cityParkingModel: CityParkingModel
-        cityParkingModel = CityParkingModel(
-            user = seetyUser,
-            location = seetyLocationInfo,
-            rules = seetyStreetRules, 
-            streetComplete = seetyStreetComplete
-        )
-        return cityParkingModel 
-
-
-
-    def get_street_address(self, response:SeetyLocationResponse) -> Optional[str]:
-        """
-        Extract the formatted_address where result type is 'street_address'.
-        Returns None if not found.
-        """
-        if response.status != "OK":
-            return None
-
-        for result in response.results:
-            if "street_address" in result.types:
-                return result.formatted_address
-
-        return None
-
-
-    def haversine_distance(self, lat1, lon1, lat2, lon2):
-        # Radius of the Earth in kilometers
-        earth_radius = 6371
-
-        # Convert latitude and longitude from degrees to radians
-        lat1 = math.radians(lat1)
-        lon1 = math.radians(lon1)
-        lat2 = math.radians(lat2)
-        lon2 = math.radians(lon2)
-
-        # Haversine formula
-        dlat = lat2 - lat1
-        dlon = lon2 - lon1
-        a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
-        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-
-        # Calculate the distance
-        distance = round(earth_radius * c, 2)
-        # _LOGGER.debug(f"distance: {distance}, lat1: {lat1}, lon1: {lon1}, lat2: {lat2}, lon2: {lon2}")
-
-        return distance
-
-        # # Example usage
-        # lat1 = 52.5200  # Latitude of location 1
-        # lon1 = 13.4050  # Longitude of location 1
-        # lat2 = 48.8566  # Latitude of location 2
-        # lon2 = 2.3522   # Longitude of location 2
-
-        # distance = haversine_distance(lat1, lon1, lat2, lon2)
-        # print(f"Approximate distance: {distance:.2f} km")
-
-
-
-    async def json_get_with_retry_client(self, url, header=None):
-        json_response = None
+        parsed = SimpleCookie()
         try:
-            async with self.retry_client.get(url, headers=header) as response:
+            parsed.load(value)
+        except CookieError:
+            parsed = SimpleCookie()
+
+        if parsed:
+            for key, morsel in parsed.items():
+                self._cookies[key] = morsel.value
+            return
+
+        for part in value.split(";"):
+            if "=" not in part:
+                continue
+            key, cookie_value = part.split("=", 1)
+            key = key.strip()
+            if key:
+                self._cookies[key] = cookie_value.strip()
+
+    def get_cookie_header(self) -> str:
+        """Return the current Cookie header value."""
+        return "; ".join(f"{key}={value}" for key, value in sorted(self._cookies.items()))
+
+    async def get_device_id(self) -> str | None:
+        """Initialize Delhaize device cookies and return the device id."""
+        data = await self.graphql("DeviceId", DEVICE_ID_QUERY)
+        return data.get("deviceId")
+
+    async def login(
+        self,
+        username: str,
+        password: str,
+        *,
+        lang: str | None = None,
+        remember: bool = True,
+    ) -> dict[str, Any]:
+        """Log in with username and password."""
+        await self.get_device_id()
+        variables = {
+            "username": username,
+            "password": password,
+            "termsAndConditionsAccepted": False,
+            "termsAndConditionsValidation": False,
+            "remember": remember,
+            "prospect_token": None,
+            "lang": lang or self.language,
+            "captcha": None,
+            "mobile": False,
+            "country": "BE",
+        }
+        return await self.graphql("Login", LOGIN_MUTATION, variables=variables)
+
+    async def send_login_mfa_otp_code(
+        self,
+        mfa_token: str,
+        *,
+        mfa_purpose: str = "LOGIN",
+        lang: str | None = None,
+    ) -> dict[str, Any]:
+        """Ask Delhaize to send an MFA one-time password."""
+        variables = {
+            "mfaPurpose": mfa_purpose,
+            "mfaToken": mfa_token,
+            "captcha": None,
+            "lang": lang or self.language,
+        }
+        return await self.graphql(
+            "SendLoginMfaOtpCode",
+            SEND_LOGIN_MFA_OTP_MUTATION,
+            variables=variables,
+        )
+
+    async def login_with_mfa(
+        self,
+        otp_code: str,
+        mfa_token: str,
+        *,
+        lang: str | None = None,
+        remember: bool = True,
+    ) -> dict[str, Any]:
+        """Complete login with a one-time password."""
+        variables = {
+            "otpCode": otp_code,
+            "mfaToken": mfa_token,
+            "termsAndConditionsAccepted": False,
+            "termsAndConditionsValidation": False,
+            "remember": remember,
+            "lang": lang or self.language,
+            "mobile": False,
+            "country": "BE",
+        }
+        return await self.graphql("LoginWithMFA", LOGIN_WITH_MFA_MUTATION, variables=variables)
+
+    async def refresh_customer_auth_cookies(self) -> bool:
+        """Refresh Delhaize customer auth cookies when a refresh cookie is present."""
+        data = await self.graphql(
+            "RefreshCustomerToken",
+            REFRESH_CUSTOMER_TOKEN_MUTATION,
+            extra_headers={"x-do-refresh-token": "true"},
+        )
+        return bool(data.get("refreshCustomerAuthCookies"))
+
+    async def current_customer(self, *, mode: str = "FULL") -> dict[str, Any]:
+        """Return the logged-in customer."""
+        data = await self.graphql(
+            "CurrentCustomer",
+            CURRENT_CUSTOMER_QUERY,
+            variables={"mode": mode},
+        )
+        customer = data.get("currentCustomer")
+        if not customer:
+            raise DelhaizeAuthError("Delhaize did not return a logged-in customer")
+        return customer
+
+    async def validate_session(self) -> dict[str, Any]:
+        """Validate the current session, trying a cookie refresh once."""
+        try:
+            return await self.current_customer()
+        except DelhaizeAuthError:
+            if not self.get_cookie_header():
+                raise
+            await self.refresh_customer_auth_cookies()
+            return await self.current_customer()
+
+    async def get_loyalty_details(self, *, lang: str | None = None) -> dict[str, Any]:
+        """Return loyalty points, savings, and Nutri-Boost details."""
+        return await self.graphql(
+            "getIbizaAccountDetails",
+            IBIZA_ACCOUNT_DETAILS_QUERY,
+            variables={"lang": lang or self.language},
+        )
+
+    async def get_personal_offers_count(self, *, lang: str | None = None) -> dict[str, Any]:
+        """Return personal offer counts."""
+        data = await self.graphql(
+            "PersonalOffersCount",
+            PERSONAL_OFFERS_COUNT_QUERY,
+            variables={"lang": lang or self.language},
+        )
+        return data.get("personalOffersCount") or {}
+
+    async def get_personal_offers(self, *, lang: str | None = None) -> dict[str, Any]:
+        """Return personal offers and their aggregated benefit."""
+        data = await self.graphql(
+            "PersonalOffersV2",
+            PERSONAL_OFFERS_QUERY,
+            variables={"lang": lang or self.language},
+        )
+        return data.get("personalOffersV2") or {}
+
+    async def activate_all_personal_offers(self) -> Any:
+        """Activate all available personal offers."""
+        data = await self.graphql(
+            "ActivateAllPersonalOffers",
+            ACTIVATE_ALL_PERSONAL_OFFERS_MUTATION,
+        )
+        return data.get("activateAllPersonalOffers")
+
+    async def fetch_summary(self, *, auto_activate: bool = False) -> dict[str, Any]:
+        """Return all data used by the Home Assistant entities."""
+        summary: dict[str, Any] = {
+            "customer": await self.validate_session(),
+            "loyalty": {},
+            "personal_offers_count": {},
+            "personal_offers": {},
+        }
+
+        summary["loyalty"] = await self.get_loyalty_details()
+        summary["personal_offers_count"] = await self.get_personal_offers_count()
+
+        if auto_activate and self._has_inactive_personal_offers(summary):
+            try:
+                summary["activation_result"] = await self.activate_all_personal_offers()
+                summary["personal_offers_count"] = await self.get_personal_offers_count()
+            except DelhaizeApiError as err:
+                summary["activation_error"] = str(err)
+                _LOGGER.debug("Could not activate Delhaize personal offers: %s", err)
+
+        try:
+            summary["personal_offers"] = await self.get_personal_offers()
+        except DelhaizeApiError as err:
+            summary["personal_offers_error"] = str(err)
+            _LOGGER.debug("Could not fetch Delhaize personal offer details: %s", err)
+
+        return summary
+
+    async def graphql(
+        self,
+        operation_name: str,
+        query: str,
+        *,
+        variables: dict[str, Any] | None = None,
+        extra_headers: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Execute a GraphQL operation."""
+        payload = {
+            "operationName": operation_name,
+            "variables": variables or {},
+            "query": query,
+        }
+        headers = self._headers(operation_name, extra_headers=extra_headers)
+
+        try:
+            async with self.websession.post(
+                API_URL,
+                json=payload,
+                headers=headers,
+                timeout=30,
+            ) as response:
+                response_text = await response.text()
+                self._store_response_cookies(response)
                 status = response.status
-                reason = response.reason
-                headers = dict(response.headers)
+        except (ClientError, TimeoutError, CancelledError) as err:
+            raise DelhaizeRequestError(f"Could not reach Delhaize: {err}") from err
 
-                _LOGGER.debug("GET %s -> %s %s", url, status, reason)
-                if response.status == 200:
-                    result = await response.json(content_type=None)
-                    _LOGGER.debug(f"response get url {url}, status: {response.status}, response: {result}")
-                    if result:
-                        json_response = result
-                    else:
-                        raise EmptyResponseError()
-                elif response.status == 429:
-                    raise RateLimitHitError("Rate limit of API has been hit")
-                else:
-                    self.clearDelhaizeUserToken()
-                    _LOGGER.exception(
-                        "HTTPError %s occurred while requesting %s, reason: %s, headers: %s",
-                        response.status,
-                        url,
-                        reason,
-                        headers
-                    )
-        except ValidationError as err:
-            self.clearDelhaizeUserToken()
-            raise ValidationError(err)
-        except (
-            ClientError,
-            TimeoutError,
-            CancelledError,
-            ) as err:
-            self.clearDelhaizeUserToken()
-            # Something else failed
-            response_body = await response.text()
-            _LOGGER.exception(
-                "Error while requesting %s: %s, error: %s",
-                url,
-                response_body,
-                err,
-                exc_info=True
+        result = self._decode_response(response_text, operation_name)
+        if status >= 400:
+            errors = result.get("errors") if isinstance(result, dict) else None
+            if errors:
+                self._raise_graphql_errors(operation_name, errors)
+            raise DelhaizeRequestError(
+                f"Delhaize returned HTTP {status} for {operation_name}"
             )
-            raise err
-        return json_response
 
+        errors = result.get("errors") if isinstance(result, dict) else None
+        if errors:
+            self._raise_graphql_errors(operation_name, errors)
 
-    async def json_post_with_retry_client(self, url, payload, header=None):
-        json_response = None
+        data = result.get("data") if isinstance(result, dict) else None
+        if data is None:
+            raise DelhaizeApiError(f"Delhaize returned no data for {operation_name}")
+        return data
+
+    def _headers(
+        self,
+        operation_name: str,
+        *,
+        extra_headers: dict[str, str] | None = None,
+    ) -> dict[str, str]:
+        """Build request headers matching the Delhaize web client."""
+        headers = {
+            "Accept": "*/*",
+            "Content-Type": "application/json",
+            "Origin": BASE_URL,
+            "Referer": f"{BASE_URL}/{self.language}/login",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0 Safari/537.36"
+            ),
+            "X-Apollo-Operation-Name": operation_name,
+        }
+        cookie_header = self.get_cookie_header()
+        if cookie_header:
+            headers["Cookie"] = cookie_header
+        if extra_headers:
+            headers.update(extra_headers)
+        return headers
+
+    def _store_response_cookies(self, response: ClientResponse) -> None:
+        """Store cookies returned by Delhaize."""
+        for key, morsel in response.cookies.items():
+            if morsel.value:
+                self._cookies[key] = morsel.value
+            else:
+                self._cookies.pop(key, None)
+
+    def _decode_response(self, response_text: str, operation_name: str) -> dict[str, Any]:
+        """Decode a JSON GraphQL response."""
         try:
-            async with self.retry_client.post(url, headers=header, json=payload) as response:
-                _LOGGER.debug(f"response post url {url}, status: {response.status}, payload: {payload}")
-                if response.status == 200:
-                    result = await response.json(content_type=None)
-                    _LOGGER.debug(f"response post url {url}, status: {response.status}, payload: {payload}, response: {result}")
-                    if result:
-                        json_response = result
-                    else:
-                        raise EmptyResponseError()
-                elif response.status == 429:
-                    raise RateLimitHitError("Rate limit of API has been hit")
-                else:
-                    self.clearDelhaizeUserToken()
+            return json.loads(response_text)
+        except json.JSONDecodeError as err:
+            _LOGGER.debug("Non-JSON response for %s: %s", operation_name, response_text[:500])
+            raise DelhaizeRequestError(
+                f"Delhaize returned an invalid response for {operation_name}"
+            ) from err
 
-                    error_message = await response.text()
-                    _LOGGER.exception(
-                        "HTTPError %s occurred while requesting %s, error message: %s",
-                        response.status,
-                        url,
-                        error_message
-                    )
-        except ValidationError as err:
-            self.clearDelhaizeUserToken()
-            _LOGGER.error(err)
-            raise ValidationError(err)
-        except (
-            ClientError,
-            TimeoutError,
-            CancelledError,
-        ) as err:
-            self.clearDelhaizeUserToken()
-            response_body = await response.text()
-            _LOGGER.warning(f"Error while requesting {url} {response_body}, error: {err}, exc_info: {err.__traceback__}")
-            # Something else failed
-            raise err
-        return json_response
+    def _raise_graphql_errors(
+        self,
+        operation_name: str,
+        errors: list[dict[str, Any]],
+    ) -> None:
+        """Raise a typed exception for GraphQL errors."""
+        messages = [str(error.get("message") or "Unknown Delhaize error") for error in errors]
+        combined = "; ".join(messages)
+        text = " ".join([combined, *(_error_codes(errors))]).lower()
+
+        if "otp" in text or "mfa" in text:
+            raise DelhaizeMfaRequired(
+                combined,
+                errors=errors,
+                mfa_token=_find_value(errors, "mfaToken") or _find_value(errors, "mfa_token"),
+                mfa_purpose=_find_value(errors, "mfaPurpose") or _find_value(errors, "mfa_purpose"),
+            )
+
+        if "captcha" in text or "recaptcha" in text:
+            raise DelhaizeCaptchaRequired(combined, errors=errors)
+
+        if (
+            "forbidden" in text
+            or "unauthorized" in text
+            or "anonymous user" in text
+            or "invalid_grant" in text
+            or "invalidcredentials" in text.replace("_", "")
+            or operation_name.lower() in {"login", "loginwithmfa"}
+        ):
+            raise DelhaizeAuthError(combined, errors=errors)
+
+        raise DelhaizeApiError(combined, errors=errors)
+
+    @staticmethod
+    def _has_inactive_personal_offers(summary: dict[str, Any]) -> bool:
+        """Return whether the offer count says there are inactive offers."""
+        counts = summary.get("personal_offers_count") or {}
+        try:
+            total = int(counts.get("totalCount") or 0)
+            active = int(counts.get("activatedCount") or 0)
+        except (TypeError, ValueError):
+            return False
+        return total > active
 
 
-class EmptyResponseError(Exception):
-    """Raised when returned Location API data is empty."""
+def _error_codes(errors: list[dict[str, Any]]) -> list[str]:
+    """Extract reason and extension codes from GraphQL errors."""
+    codes: list[str] = []
+    for error in errors:
+        extensions = error.get("extensions") or {}
+        for key in ("code", "reasonCode", "type"):
+            value = error.get(key) or extensions.get(key)
+            if value is not None:
+                codes.append(str(value))
+    return codes
 
-    pass
+
+def _find_value(value: Any, key: str) -> Any:
+    """Recursively find a key in a nested response."""
+    if isinstance(value, dict):
+        if key in value:
+            return value[key]
+        for item in value.values():
+            found = _find_value(item, key)
+            if found is not None:
+                return found
+    elif isinstance(value, list):
+        for item in value:
+            found = _find_value(item, key)
+            if found is not None:
+                return found
+    return None
 
 
-class ValidationError(Exception):
-    """Raised when returned Location API data is in the wrong format."""
-
-    pass
-
-
-class RateLimitHitError(Exception):
-    """Raised when the rate limit of the API has been hit."""
-
-    pass
+__all__ = [
+    "DelhaizeApi",
+    "DelhaizeApiError",
+    "DelhaizeAuthError",
+    "DelhaizeCaptchaRequired",
+    "DelhaizeMfaRequired",
+    "DelhaizeRequestError",
+]

@@ -2,70 +2,62 @@
 [![GitHub release](https://img.shields.io/github/release/myTselection/delhaize_hacs.svg)](https://github.com/myTselection/delhaize_hacs/releases)
 ![GitHub repo size](https://img.shields.io/github/repo-size/myTselection/delhaize_hacs.svg)
 
-[![GitHub issues](https://img.shields.io/github/issues/myTselection/delhaize_hacs.svg)](https://github.com/myTselection/delhaize_hacs/issues)
-[![GitHub last commit](https://img.shields.io/github/last-commit/myTselection/delhaize_hacs.svg)](https://github.com/myTselection/delhaize_hacs/commits/master)
-[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/myTselection/delhaize_hacs.svg)](https://github.com/myTselection/delhaize_hacs/graphs/commit-activity)
-
 # Delhaize Home Assistant integration
-Home Assistant custom integration to provide Delhaize SuperPlus and e-deals information. This custom component has been built from the ground up to fetch your Delhaize SuperPlus and e-Deals information and integrate this information into Home Assistant. This integration is built against the public websites provided by [Delhaizee.be](https://dwww.delhaize.be). Sensors will be created for Delhaize loyalty card and points. Automatic activation/registration of [e-Deals](https://www.delhaize.be/nl/my-account/personal-offers) is possible. 
 
-This integration is in no way affiliated with Delhaize.
+Home Assistant custom integration for Delhaize SuperPlus, savings, loyalty points, and personal e-Deals.
 
-| :warning: Please don't report issues with this integration to Delhaize, they will not be able to support you. |
-| ---------------------------------------------------------------------------------------------------------------------|
+This integration talks to the same Delhaize GraphQL endpoint used by the website (`https://www.delhaize.be/api/v1/`). It is not affiliated with Delhaize.
 
+| :warning: Please do not report integration issues to Delhaize. They will not be able to support this custom component. |
+| -------------------------------------------------------------------------------------------------------------------- |
 
-<p align="center"><img src="https://raw.githubusercontent.com/myTselection/delhaize_hacs/master/icon.png"/></p>
+## Authentication
 
+Delhaize currently exposes a website login mutation, but the public login page can require captcha and/or MFA. Home Assistant cannot solve Delhaize captcha challenges, so the integration supports two setup methods:
 
-# Main use case
+- Username and password: works only when Delhaize accepts the website login request without captcha.
+- Logged-in browser Cookie header: recommended fallback when Delhaize asks for captcha. Log in to `https://www.delhaize.be/` in a browser, copy the request `Cookie` header from an authenticated request to `/api/v1/`, and paste it into the setup flow.
 
-[Delhaize e-Deals](https://www.delhaize.be/nl/my-account/personal-offers) personal offers allow users to get extra discount and points. But these e-Deals need to manually get activated on regular base before the extra discount is applied. This integration can automatically activate new e-Deals.
-
-
+The integration stores refreshed Delhaize cookies in the Home Assistant config entry so the session can survive restarts as long as Delhaize keeps the session valid.
 
 ## Installation
+
 - [HACS](https://hacs.xyz/): search for delhaize_hacs in the default HACS repo list or use below button to navigate directly to it on your local system and install via HACS. 
    -    [![Open your Home Assistant instance and open the repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg?style=flat-square)](https://my.home-assistant.io/redirect/hacs_repository/?owner=myTselection&repository=delhaize_hacs&category=integration)
-- Restart Home Assistant
-- Add 'Delhaize' integration via HA Settings > 'Devices and Services' > 'Integrations'
-- In the setup configuration, provide your Delhaize username and password
+- Restart Home Assistant.
+- Add the `Delhaize` integration from Settings > Devices and services.
+- Provide either Delhaize credentials or a logged-in browser Cookie header.
 
-## Integration
+## Entities
 
-### Sensors
-- <code>sensor.delhaize_card</code>: sensor with adres linked to location of `origin`
-- <code>sensor.delhaize_points</code>: sensor with indication of days on which the city parking is restricted
-- <code>sensor.delhaize_superplus</code>: sensor with max amount of minutes is allowed to park during the days and time restricted schedule
-- <code>sensor.delhaize_</code>: TODO
+The integration creates sensors for:
 
-    
-### Services / Actions / Automation
+- Loyalty points
+- Savings
+- Personal offers available
+- Personal offers total
+- Personal offers activated
+- Personal offers benefit
+- Loyalty profile
+- Account
 
-* TODO
+## Services
 
-### Markdown example
+`delhaize_hacs.activate_personal_offers`
 
-TODO
+Activates available personal offers for all configured accounts, or for a specific config entry when `entry_id` is provided.
 
+## Debug logging
 
-## Status
-Proof of concept status, still validating and extending functionalities. [Issues](https://github.com/myTselection/delhaize_hacs/issues) section in GitHub.
+Add this to `configuration.yaml` when troubleshooting:
 
-## Technical pointers
-The main logic and API connection related code can be found within source code delhaize_hacs/custom_components/delhaize_hacs:
-- [sensor.py](https://github.com/myTselection/delhaize_hacs/blob/master/custom_components/delhaize_hacs/sensor.py)
-- [coordinator.py](https://github.com/myTselection/delhaize_hacs/blob/master/custom_components/delhaize_hacs/coordinator.py)
-- [delhaizeApi](https://github.com/myTselection/delhaize_hacs/blob/master/custom_components/delhaize_hacs/delhaizeApi/__init__.py)
-
-All other files just contain boilerplat code for the integration to work wtihin HA or to have some constants/strings/translations.
-
-If you would encounter some issues with this custom component, you can enable extra debug logging by adding below into your `configuration.yaml`:
-
-```
+```yaml
 logger:
   default: info
   logs:
-     custom_components.delhaize_hacs: debug
+    custom_components.delhaize_hacs: debug
 ```
 
+## Status
+
+Proof of concept. Delhaize can change its website GraphQL schema, captcha requirements, or cookie behavior at any time.

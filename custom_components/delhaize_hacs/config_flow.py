@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from aiohttp.client_exceptions import ClientError
@@ -34,10 +35,12 @@ from .delhaizeApi import (
     DelhaizeCaptchaRequired,
     DelhaizeMfaRequired,
     DelhaizeRequestError,
+    summarize_graphql_errors,
 )
 
 LANGUAGE_OPTIONS = ["nl", "fr", "en"]
 CONF_OTP_CODE = "otp_code"
+_LOGGER = logging.getLogger(DOMAIN)
 
 
 def _user_schema(user_input: dict[str, Any] | None = None) -> vol.Schema:
@@ -85,6 +88,7 @@ class DelhaizeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._pending_api: DelhaizeApi | None = None
         self._pending_input: dict[str, Any] | None = None
         self._mfa_token: str | None = None
+        self._mfa_target: str = "your email address"
         self._reauth_entry: config_entries.ConfigEntry | None = None
 
     async def async_step_user(
@@ -99,6 +103,14 @@ class DelhaizeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         data = _clean_input(user_input)
         has_cookie = bool(data.get(CONF_COOKIE))
         has_credentials = bool(data.get(CONF_USERNAME) and data.get(CONF_PASSWORD))
+        _LOGGER.debug(
+            "Starting Delhaize setup authentication: username=%s credentials_present=%s cookie_present=%s language=%s auto_activate=%s",
+            _mask_identifier(data.get(CONF_USERNAME)),
+            has_credentials,
+            has_cookie,
+            data.get(CONF_LANGUAGE, DEFAULT_LANGUAGE),
+            data.get(CONF_AUTO_ACTIVATE_OFFERS, False),
+        )
         if not has_cookie and not has_credentials:
             errors["base"] = "missing_auth"
             return self.async_show_form(
@@ -116,21 +128,46 @@ class DelhaizeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         try:
             customer = await self._authenticate(api, data, has_credentials)
         except DelhaizeMfaRequired as err:
+            _LOGGER.debug(
+                "Delhaize setup requires MFA: token_present=%s purpose=%s errors=%s",
+                bool(err.mfa_token),
+                err.mfa_purpose,
+                summarize_graphql_errors(err.errors),
+            )
             if not err.mfa_token:
                 errors["base"] = "mfa_required"
             else:
                 self._pending_api = api
                 self._pending_input = data
                 self._mfa_token = err.mfa_token
-                await _try_send_mfa_code(api, err, data.get(CONF_LANGUAGE, DEFAULT_LANGUAGE))
-                return self.async_show_form(step_id="mfa", data_schema=MFA_SCHEMA)
-        except DelhaizeCaptchaRequired:
+                self._mfa_target = await _try_send_mfa_code(
+                    api,
+                    err,
+                    data.get(CONF_LANGUAGE, DEFAULT_LANGUAGE),
+                )
+                _LOGGER.debug("Delhaize MFA email code requested: target=%s", self._mfa_target)
+                return self._show_mfa_form()
+        except DelhaizeCaptchaRequired as err:
+            _LOGGER.debug(
+                "Delhaize setup requires captcha: errors=%s",
+                summarize_graphql_errors(err.errors),
+            )
             errors["base"] = "captcha_required"
-        except DelhaizeAuthError:
+        except DelhaizeAuthError as err:
+            _LOGGER.debug(
+                "Delhaize credential login failed: errors=%s",
+                summarize_graphql_errors(err.errors),
+            )
             errors["base"] = "login_failed"
-        except (DelhaizeRequestError, ClientError, TimeoutError):
+        except (DelhaizeRequestError, ClientError, TimeoutError) as err:
+            _LOGGER.debug("Delhaize setup connection failed: %r", err)
             errors["base"] = "cannot_connect"
-        except DelhaizeApiError:
+        except DelhaizeApiError as err:
+            _LOGGER.debug(
+                "Delhaize setup failed with API error: error=%s errors=%s",
+                err,
+                summarize_graphql_errors(err.errors),
+            )
             errors["base"] = "unknown"
 
         if errors:
@@ -166,38 +203,63 @@ class DelhaizeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle a Delhaize MFA one-time password."""
         errors: dict[str, str] = {}
         if user_input is None:
-            return self.async_show_form(step_id="mfa", data_schema=MFA_SCHEMA)
+            return self._show_mfa_form()
 
         if not self._pending_api or not self._pending_input or not self._mfa_token:
             return self.async_abort(reason="mfa_session_expired")
 
         try:
+            _LOGGER.debug("Submitting Delhaize MFA email code: target=%s", self._mfa_target)
             await self._pending_api.login_with_mfa(
                 str(user_input[CONF_OTP_CODE]).strip(),
                 self._mfa_token,
                 lang=self._pending_input.get(CONF_LANGUAGE, DEFAULT_LANGUAGE),
             )
             customer = await self._pending_api.validate_session()
-        except DelhaizeCaptchaRequired:
+            _LOGGER.debug("Delhaize MFA login completed and session validated")
+        except DelhaizeCaptchaRequired as err:
+            _LOGGER.debug(
+                "Delhaize MFA login requires captcha: errors=%s",
+                summarize_graphql_errors(err.errors),
+            )
             errors["base"] = "captcha_required"
-        except DelhaizeAuthError:
+        except DelhaizeAuthError as err:
+            _LOGGER.debug(
+                "Delhaize MFA login failed: errors=%s",
+                summarize_graphql_errors(err.errors),
+            )
             errors["base"] = "login_failed"
-        except (DelhaizeRequestError, ClientError, TimeoutError):
+        except (DelhaizeRequestError, ClientError, TimeoutError) as err:
+            _LOGGER.debug("Delhaize MFA login connection failed: %r", err)
             errors["base"] = "cannot_connect"
-        except DelhaizeApiError:
+        except DelhaizeApiError as err:
+            _LOGGER.debug(
+                "Delhaize MFA login failed with API error: error=%s errors=%s",
+                err,
+                summarize_graphql_errors(err.errors),
+            )
             errors["base"] = "unknown"
 
         if errors:
-            return self.async_show_form(
-                step_id="mfa",
-                data_schema=MFA_SCHEMA,
-                errors=errors,
-            )
+            return self._show_mfa_form(errors=errors)
 
         return await self._create_delhaize_entry(
             self._pending_input,
             customer,
             self._pending_api,
+        )
+
+    def _show_mfa_form(
+        self,
+        *,
+        errors: dict[str, str] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Show the MFA email code form."""
+        return self.async_show_form(
+            step_id="mfa",
+            data_schema=MFA_SCHEMA,
+            errors=errors or {},
+            description_placeholders={"otp_target": self._mfa_target},
         )
 
     async def _authenticate(
@@ -209,11 +271,18 @@ class DelhaizeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Authenticate with cookie or credentials and return the customer."""
         if data.get(CONF_COOKIE):
             try:
+                _LOGGER.debug("Trying Delhaize setup with provided cookie")
                 return await api.validate_session()
-            except DelhaizeAuthError:
+            except DelhaizeAuthError as err:
+                _LOGGER.debug(
+                    "Provided Delhaize cookie did not validate: credentials_fallback=%s errors=%s",
+                    has_credentials,
+                    summarize_graphql_errors(err.errors),
+                )
                 if not has_credentials:
                     raise
 
+        _LOGGER.debug("Trying Delhaize setup with username/password")
         await api.login(
             data[CONF_USERNAME],
             data[CONF_PASSWORD],
@@ -259,16 +328,40 @@ async def _try_send_mfa_code(
     api: DelhaizeApi,
     err: DelhaizeMfaRequired,
     language: str,
-) -> None:
-    """Try to trigger sending an MFA code."""
+) -> str:
+    """Try to trigger sending an MFA code and return the target."""
     try:
-        await api.send_login_mfa_otp_code(
+        data = await api.send_login_mfa_otp_code(
             err.mfa_token or "",
             mfa_purpose=err.mfa_purpose or "LOGIN",
             lang=language,
         )
-    except DelhaizeApiError:
-        pass
+        value = data.get("sendMfaOtpCode") if isinstance(data, dict) else None
+        if isinstance(value, dict):
+            _LOGGER.debug(
+                "Delhaize MFA email code response: method=%s target=%s next_possible_send_time=%s",
+                value.get("mfaMethod"),
+                value.get("otpTarget"),
+                value.get("nextPossibleSendTime"),
+            )
+        return _otp_target_from_response(data)
+    except DelhaizeApiError as send_err:
+        _LOGGER.debug(
+            "Could not request Delhaize MFA email code: error=%s errors=%s",
+            send_err,
+            summarize_graphql_errors(send_err.errors),
+        )
+        return "your email address"
+
+
+def _otp_target_from_response(data: dict[str, Any]) -> str:
+    """Extract the masked MFA target returned by Delhaize."""
+    value = data.get("sendMfaOtpCode")
+    if isinstance(value, dict):
+        target = value.get("otpTarget")
+        if target:
+            return str(target)
+    return "your email address"
 
 
 def _clean_input(user_input: dict[str, Any]) -> dict[str, Any]:
@@ -285,6 +378,17 @@ def _clean_input(user_input: dict[str, Any]) -> dict[str, Any]:
     data.setdefault(CONF_LANGUAGE, DEFAULT_LANGUAGE)
     data.setdefault(CONF_AUTO_ACTIVATE_OFFERS, False)
     return data
+
+
+def _mask_identifier(value: Any) -> str:
+    """Mask a username or email for logs."""
+    if not isinstance(value, str) or not value:
+        return "<empty>"
+    if "@" in value:
+        local, domain = value.split("@", 1)
+        masked_local = f"{local[:1]}***" if local else "***"
+        return f"{masked_local}@{domain}"
+    return f"{value[:2]}***"
 
 
 def _entry_title(customer: dict[str, Any], data: dict[str, Any]) -> str:

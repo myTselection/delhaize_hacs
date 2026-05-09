@@ -17,9 +17,9 @@
     "step": {
       "mfa": {
         "data": {
-          "otp_code": "One-time password"
+          "otp_code": "Temporary code from email"
         },
-        "description": "Enter the one-time password sent by Delhaize.",
+        "description": "Enter the temporary Delhaize code sent to {otp_target}.",
         "title": "Delhaize verification"
       },
       "user": {
@@ -30,7 +30,7 @@
           "password": "Password",
           "username": "Username or email"
         },
-        "description": "Use either Delhaize credentials or a Cookie header copied from an already logged-in browser session. Cookie setup is the fallback when Delhaize requires captcha.",
+        "description": "Use your Delhaize credentials. If Delhaize sends a temporary code by email, Home Assistant will ask for it in the next step. A Cookie header is only needed as a fallback when Delhaize requires captcha.",
         "title": "Set up Delhaize"
       }
     }

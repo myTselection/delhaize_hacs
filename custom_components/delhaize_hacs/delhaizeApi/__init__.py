@@ -57,6 +57,7 @@ mutation LoginWithMFA(
   $termsAndConditionsValidation: Boolean
   $remember: Boolean
   $lang: String
+  $captcha: CaptchaInput
   $mobile: Boolean
   $country: String
 ) {
@@ -67,6 +68,7 @@ mutation LoginWithMFA(
     termsAndConditionsValidation: $termsAndConditionsValidation
     remember: $remember
     lang: $lang
+    captcha: $captcha
     mobile: $mobile
     country: $country
   ) {
@@ -271,6 +273,7 @@ class DelhaizeApi:
 
     async def get_device_id(self) -> str | None:
         """Initialize Delhaize device cookies and return the device id."""
+        _LOGGER.debug("Initializing Delhaize device session")
         data = await self.graphql("DeviceId", DEVICE_ID_QUERY)
         return data.get("deviceId")
 
@@ -283,6 +286,12 @@ class DelhaizeApi:
         remember: bool = True,
     ) -> dict[str, Any]:
         """Log in with username and password."""
+        _LOGGER.debug(
+            "Starting Delhaize credential login: language=%s remember=%s cookie_present=%s",
+            lang or self.language,
+            remember,
+            bool(self.get_cookie_header()),
+        )
         await self.get_device_id()
         variables = {
             "username": username,
@@ -306,6 +315,12 @@ class DelhaizeApi:
         lang: str | None = None,
     ) -> dict[str, Any]:
         """Ask Delhaize to send an MFA one-time password."""
+        _LOGGER.debug(
+            "Requesting Delhaize MFA email code: purpose=%s language=%s token_present=%s",
+            mfa_purpose,
+            lang or self.language,
+            bool(mfa_token),
+        )
         variables = {
             "mfaPurpose": mfa_purpose,
             "mfaToken": mfa_token,
@@ -327,6 +342,13 @@ class DelhaizeApi:
         remember: bool = True,
     ) -> dict[str, Any]:
         """Complete login with a one-time password."""
+        _LOGGER.debug(
+            "Completing Delhaize MFA login: language=%s remember=%s token_present=%s code_length=%s",
+            lang or self.language,
+            remember,
+            bool(mfa_token),
+            len(otp_code or ""),
+        )
         variables = {
             "otpCode": otp_code,
             "mfaToken": mfa_token,
@@ -334,6 +356,7 @@ class DelhaizeApi:
             "termsAndConditionsValidation": False,
             "remember": remember,
             "lang": lang or self.language,
+            "captcha": None,
             "mobile": False,
             "country": "BE",
         }
@@ -341,6 +364,7 @@ class DelhaizeApi:
 
     async def refresh_customer_auth_cookies(self) -> bool:
         """Refresh Delhaize customer auth cookies when a refresh cookie is present."""
+        _LOGGER.debug("Refreshing Delhaize customer auth cookies")
         data = await self.graphql(
             "RefreshCustomerToken",
             REFRESH_CUSTOMER_TOKEN_MUTATION,
@@ -363,10 +387,12 @@ class DelhaizeApi:
     async def validate_session(self) -> dict[str, Any]:
         """Validate the current session, trying a cookie refresh once."""
         try:
+            _LOGGER.debug("Validating Delhaize session")
             return await self.current_customer()
         except DelhaizeAuthError:
             if not self.get_cookie_header():
                 raise
+            _LOGGER.debug("Delhaize session validation failed; trying cookie refresh")
             await self.refresh_customer_auth_cookies()
             return await self.current_customer()
 
@@ -447,6 +473,13 @@ class DelhaizeApi:
             "query": query,
         }
         headers = self._headers(operation_name, extra_headers=extra_headers)
+        _LOGGER.debug(
+            "Sending Delhaize GraphQL request: operation=%s variables=%s cookie_present=%s extra_headers=%s",
+            operation_name,
+            sorted(payload["variables"].keys()),
+            "Cookie" in headers,
+            sorted((extra_headers or {}).keys()),
+        )
 
         try:
             async with self.websession.post(
@@ -458,9 +491,18 @@ class DelhaizeApi:
                 response_text = await response.text()
                 self._store_response_cookies(response)
                 status = response.status
+                cookie_names = sorted(response.cookies.keys())
         except (ClientError, TimeoutError, CancelledError) as err:
+            _LOGGER.debug("Delhaize GraphQL request failed: operation=%s error=%r", operation_name, err)
             raise DelhaizeRequestError(f"Could not reach Delhaize: {err}") from err
 
+        _LOGGER.debug(
+            "Received Delhaize GraphQL response: operation=%s status=%s bytes=%s set_cookies=%s",
+            operation_name,
+            status,
+            len(response_text),
+            cookie_names,
+        )
         result = self._decode_response(response_text, operation_name)
         if status >= 400:
             errors = result.get("errors") if isinstance(result, dict) else None
@@ -532,13 +574,24 @@ class DelhaizeApi:
         messages = [str(error.get("message") or "Unknown Delhaize error") for error in errors]
         combined = "; ".join(messages)
         text = " ".join([combined, *(_error_codes(errors))]).lower()
+        summary = summarize_graphql_errors(errors)
+        _LOGGER.debug(
+            "Delhaize GraphQL returned errors: operation=%s errors=%s",
+            operation_name,
+            summary,
+        )
 
         if "otp" in text or "mfa" in text:
             raise DelhaizeMfaRequired(
                 combined,
                 errors=errors,
                 mfa_token=_find_value(errors, "mfaToken") or _find_value(errors, "mfa_token"),
-                mfa_purpose=_find_value(errors, "mfaPurpose") or _find_value(errors, "mfa_purpose"),
+                mfa_purpose=(
+                    _find_value(errors, "mfaOtpPurpose")
+                    or _find_value(errors, "mfa_otp_purpose")
+                    or _find_value(errors, "mfaPurpose")
+                    or _find_value(errors, "mfa_purpose")
+                ),
             )
 
         if "captcha" in text or "recaptcha" in text:
@@ -580,6 +633,46 @@ def _error_codes(errors: list[dict[str, Any]]) -> list[str]:
     return codes
 
 
+def summarize_graphql_errors(errors: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return sanitized GraphQL error details for debug logs."""
+    summary: list[dict[str, Any]] = []
+    sensitive_keys = {
+        "captcha",
+        "mfaToken",
+        "mfa_token",
+        "otpCode",
+        "otp_code",
+        "password",
+        "refreshToken",
+        "token",
+    }
+
+    for error in errors:
+        extensions = error.get("extensions") or {}
+        item: dict[str, Any] = {
+            "message": error.get("message"),
+            "path": error.get("path"),
+            "code": error.get("code") or extensions.get("code"),
+            "reasonCode": error.get("reasonCode") or extensions.get("reasonCode"),
+            "type": error.get("type") or extensions.get("type"),
+            "extension_keys": sorted(extensions.keys()),
+        }
+        for key in sensitive_keys:
+            if _find_value(error, key) is not None:
+                item[f"{key}_present"] = True
+        purpose = (
+            _find_value(error, "mfaOtpPurpose")
+            or _find_value(error, "mfa_otp_purpose")
+            or _find_value(error, "mfaPurpose")
+            or _find_value(error, "mfa_purpose")
+        )
+        if purpose is not None:
+            item["mfa_purpose"] = purpose
+        summary.append({key: value for key, value in item.items() if value is not None})
+
+    return summary
+
+
 def _find_value(value: Any, key: str) -> Any:
     """Recursively find a key in a nested response."""
     if isinstance(value, dict):
@@ -604,4 +697,5 @@ __all__ = [
     "DelhaizeCaptchaRequired",
     "DelhaizeMfaRequired",
     "DelhaizeRequestError",
+    "summarize_graphql_errors",
 ]

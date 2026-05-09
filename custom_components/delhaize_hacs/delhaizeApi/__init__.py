@@ -15,17 +15,16 @@ from pydantic import ValidationError
 from yarl import URL
 from typing import Optional, Dict, Any
 
-from .models import CityParkingModel, SeetyLocationResponse, SeetyStreetComplete, SeetyStreetRules, SeetyUser, Coords
 
 import logging
 
 _LOGGER = logging.getLogger(__name__)
 
-class SeetyApi:
+class DelhaizeApi:
     """Class to make API requests."""
-    # store the seety user token for reuse in different API calls
+    # store the delhaize user token for reuse in different API calls
     # the token seems to be valid for a long time and reduces the number of API calls needed to get the token for each request
-    _seety_user_token: Optional[SeetyUser] = None
+    _delhaize_user_token = None
 
     def __init__(self, websession: ClientSession):
         """Initialize the session."""
@@ -34,39 +33,38 @@ class SeetyApi:
             client_session=self.websession,
             retry_options=ExponentialRetry(attempts=3, start_timeout=5),
         )
-    def clearSeetyUserToken(self):
-        """Clear the cached Seety user token."""
-        self._seety_user_token = None
-    async def getSeetyToken(self) -> SeetyUser:
-
-        if self._seety_user_token is not None:
-            _LOGGER.debug("Reusing existing Seety user token")
-            return self._seety_user_token
+    def clearDelhaizeUserToken(self):
+        """Clear the cached Delhaize user token."""
+        self._delhaize_user_token = None
+    async def getDelhaizeToken(self) -> DelhaizeUser:
+        if self._delhaize_user_token is not None:
+            _LOGGER.debug("Reusing existing Delhaize user token")
+            return self._delhaize_user_token
         url = URL(f"https://api.cparkapp.com/user/")
         header={"Content-Type": "application/json", "App-client": "web", "App-lang": "en", "App-version": "12", "Referer": "https://map.seety.co/", "Origin": "https://map.seety.co"}
         response = await self.json_post_with_retry_client(url, payload={}, header=header)
 
         if pydantic.version.VERSION.startswith("1"):
-            seetyUser = SeetyUser.parse_obj(response)
+            delhaizeUser = DelhaizeUser.parse_obj(response)
         else:
-            seetyUser = SeetyUser.model_validate(response)
+            delhaizeUser = DelhaizeUser.model_validate(response)
 
-        return seetyUser
+        return delhaizeUser
     
 
-    async def getAddressForCoordinate(self, coordinates: Coords, seetyUser: SeetyUser = None) -> SeetyLocationResponse:
-        if seetyUser is None:
-            seetyUser = await self.getSeetyToken()
+    async def getAddressForCoordinate(self, coordinates: Coords, delhaizeUser: DelhaizeUser = None) -> DelhaizeLocationResponse:
+        if delhaizeUser is None:
+            delhaizeUser = await self.getDelhaizeToken()
         url = URL(f"https://api.cparkapp.com/geocode/{coordinates.lat}/{coordinates.lon}")
-        header={"Content-Type": "application/json", "App-client": "web", "App-lang": "en", "App-version": "12", "auth-token": seetyUser.access_token, "Referer": "https://map.seety.co/", "Origin": "https://map.seety.co"}
+        header={"Content-Type": "application/json", "App-client": "web", "App-lang": "en", "App-version": "12", "auth-token": delhaizeUser.access_token, "Referer": "https://map.seety.co/", "Origin": "https://map.seety.co"}
         response = await self.json_get_with_retry_client(url, header=header)
 
         if pydantic.version.VERSION.startswith("1"):
-            seetyLocationInfo = SeetyLocationResponse.parse_obj(response)
+            delhaizeLocationInfo = DelhaizeLocationResponse.parse_obj(response)
         else:
-            seetyLocationInfo = SeetyLocationResponse.model_validate(response)
+            delhaizeLocationInfo = DelhaizeLocationResponse.model_validate(response)
 
-        return seetyLocationInfo
+        return delhaizeLocationInfo
 
     async def getAddressSeetyInfo(self, coordinates: Coords, seetyUser: SeetyUser = None, seetyLocationInfo: SeetyLocationResponse = None) -> CityParkingModel:
         if seetyUser is None:
@@ -172,7 +170,7 @@ class SeetyApi:
                 elif response.status == 429:
                     raise RateLimitHitError("Rate limit of API has been hit")
                 else:
-                    self.clearSeetyUserToken()
+                    self.clearDelhaizeUserToken()
                     _LOGGER.exception(
                         "HTTPError %s occurred while requesting %s, reason: %s, headers: %s",
                         response.status,
@@ -181,14 +179,14 @@ class SeetyApi:
                         headers
                     )
         except ValidationError as err:
-            self.clearSeetyUserToken()
+            self.clearDelhaizeUserToken()
             raise ValidationError(err)
         except (
             ClientError,
             TimeoutError,
             CancelledError,
             ) as err:
-            self.clearSeetyUserToken()
+            self.clearDelhaizeUserToken()
             # Something else failed
             response_body = await response.text()
             _LOGGER.exception(
@@ -217,7 +215,7 @@ class SeetyApi:
                 elif response.status == 429:
                     raise RateLimitHitError("Rate limit of API has been hit")
                 else:
-                    self.clearSeetyUserToken()
+                    self.clearDelhaizeUserToken()
 
                     error_message = await response.text()
                     _LOGGER.exception(
@@ -227,7 +225,7 @@ class SeetyApi:
                         error_message
                     )
         except ValidationError as err:
-            self.clearSeetyUserToken()
+            self.clearDelhaizeUserToken()
             _LOGGER.error(err)
             raise ValidationError(err)
         except (
@@ -235,7 +233,7 @@ class SeetyApi:
             TimeoutError,
             CancelledError,
         ) as err:
-            self.clearSeetyUserToken()
+            self.clearDelhaizeUserToken()
             response_body = await response.text()
             _LOGGER.warning(f"Error while requesting {url} {response_body}, error: {err}, exc_info: {err.__traceback__}")
             # Something else failed

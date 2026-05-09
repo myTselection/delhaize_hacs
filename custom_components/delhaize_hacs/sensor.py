@@ -8,10 +8,12 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import slugify
 
 from .const import BASE_URL, CONF_LANGUAGE, DEFAULT_LANGUAGE, DOMAIN, NAME
 from .coordinator import DelhaizeDataUpdateCoordinator
@@ -154,13 +156,20 @@ class DelhaizeSensor(CoordinatorEntity[DelhaizeDataUpdateCoordinator], SensorEnt
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
+        account_label = _account_label(coordinator)
+        device_name = _device_name(account_label)
+        object_id_prefix = slugify(device_name) or (
+            f"{DOMAIN}_{coordinator.config_entry.entry_id}"
+        )
+
         self.entity_description = description
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{description.key}"
+        self._attr_suggested_object_id = f"{object_id_prefix}_{description.key}"
         self._attr_attribution = "Data provided by delhaize.be"
         self._attr_has_entity_name = True
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, coordinator.config_entry.entry_id)},
-            name=NAME,
+            name=device_name,
             manufacturer="Delhaize",
             configuration_url=(
                 f"{BASE_URL}/{coordinator.config_entry.data.get(CONF_LANGUAGE, DEFAULT_LANGUAGE)}"
@@ -202,3 +211,58 @@ def _available_offers(data: dict[str, Any]) -> int | None:
 def _without_none(data: dict[str, Any]) -> dict[str, Any]:
     """Drop attributes with unknown values."""
     return {key: value for key, value in data.items() if value is not None}
+
+
+def _account_label(coordinator: DelhaizeDataUpdateCoordinator) -> str:
+    """Return the best available label for one Delhaize account."""
+    data = coordinator.data or {}
+    customer = data.get("customer") if isinstance(data.get("customer"), dict) else {}
+
+    full_name = " ".join(
+        value
+        for value in (
+            _clean_label(customer.get("firstName")),
+            _clean_label(customer.get("lastName")),
+        )
+        if value
+    ).strip()
+    if full_name:
+        return full_name
+
+    title = _clean_label(coordinator.config_entry.title)
+    if title and title.lower() != NAME.lower():
+        title_prefix = f"{NAME} "
+        if title.lower().startswith(title_prefix.lower()):
+            return title[len(title_prefix) :].strip() or title
+        return title
+
+    username = _clean_label(coordinator.config_entry.data.get(CONF_USERNAME))
+    if username:
+        return username
+
+    for value in (
+        customer.get("customerIdHash"),
+        customer.get("uid"),
+        coordinator.config_entry.unique_id,
+    ):
+        label = _clean_label(value)
+        if label:
+            return f"Account {label[-8:]}"
+
+    return f"Account {coordinator.config_entry.entry_id[:8]}"
+
+
+def _device_name(account_label: str) -> str:
+    """Return a Home Assistant device name for one Delhaize account."""
+    label = account_label.lower()
+    if label == NAME.lower() or label.startswith(f"{NAME.lower()} "):
+        return account_label
+    return f"{NAME} {account_label}"
+
+
+def _clean_label(value: Any) -> str | None:
+    """Return a stripped non-empty string."""
+    if value is None:
+        return None
+    label = str(value).strip()
+    return label or None

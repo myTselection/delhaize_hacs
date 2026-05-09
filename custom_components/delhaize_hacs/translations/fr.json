@@ -1,0 +1,104 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Ce compte Delhaize est déjà configuré",
+      "mfa_session_expired": "La session de configuration MFA Delhaize a expiré",
+      "reauth_successful": "La réauthentification Delhaize a réussi",
+      "wrong_account": "Le compte Delhaize fourni ne correspond pas à cette entrée de configuration"
+    },
+    "error": {
+      "cannot_connect": "Échec de la connexion à Delhaize",
+      "captcha_required": "Delhaize a refusé la connexion par mot de passe car un jeton de captcha du navigateur est requis. Aucun code temporaire n'est envoyé par e-mail dans ce cas. Collez un en-tête Cookie provenant d'une session de navigateur déjà connectée.",
+      "login_failed": "Échec de la connexion. Vérifiez les identifiants ou l'en-tête Cookie.",
+      "mfa_required": "Delhaize exige une authentification multifactorielle, mais n'a pas renvoyé de jeton MFA utilisable.",
+      "missing_auth": "Fournissez soit un en-tête Cookie, soit le nom d'utilisateur et le mot de passe.",
+      "unknown": "Erreur inattendue de l'API Delhaize"
+    },
+    "step": {
+      "cookie": {
+        "data": {
+          "cookie": "En-tête Cookie d'un navigateur connecté"
+        },
+        "description": "Méthode de configuration recommandée. Collez l'en-tête Cookie provenant d'une session de navigateur Delhaize déjà connectée.",
+        "title": "En-tête Cookie Delhaize"
+      },
+      "mfa": {
+        "data": {
+          "otp_code": "Code temporaire reçu par e-mail"
+        },
+        "description": "Saisissez le code temporaire Delhaize envoyé à {otp_target}.",
+        "title": "Vérification Delhaize"
+      },
+      "user": {
+        "data": {
+          "auth_method": "Méthode d'authentification",
+          "auto_activate_offers": "Activer automatiquement les offres personnelles",
+          "language": "Langue",
+          "password": "Mot de passe",
+          "username": "Nom d'utilisateur ou e-mail"
+        },
+        "description": "L'authentification par Cookie est sélectionnée par défaut, car Delhaize exige généralement un captcha du navigateur avant que la connexion par code e-mail puisse démarrer. Laissez le nom d'utilisateur et le mot de passe vides pour le flux Cookie. La connexion par nom d'utilisateur et mot de passe reste disponible, mais peut revenir à l'authentification par Cookie.",
+        "title": "Configurer Delhaize"
+      }
+    }
+  },
+  "options": {
+    "abort": {
+      "mfa_session_expired": "La session de configuration MFA Delhaize a expiré",
+      "wrong_account": "Le compte Delhaize fourni ne correspond pas à cette entrée de configuration"
+    },
+    "error": {
+      "cannot_connect": "Échec de la connexion à Delhaize",
+      "captcha_required": "Delhaize a refusé la connexion par mot de passe car un jeton de captcha du navigateur est requis. Aucun code temporaire n'est envoyé par e-mail dans ce cas. Collez un en-tête Cookie provenant d'une session de navigateur déjà connectée.",
+      "login_failed": "Échec de la connexion. Vérifiez les identifiants ou l'en-tête Cookie.",
+      "mfa_required": "Delhaize exige une authentification multifactorielle, mais n'a pas renvoyé de jeton MFA utilisable.",
+      "missing_auth": "Fournissez le nom d'utilisateur et le mot de passe.",
+      "unknown": "Erreur inattendue de l'API Delhaize"
+    },
+    "step": {
+      "cookie": {
+        "data": {
+          "cookie": "En-tête Cookie d'un navigateur connecté"
+        },
+        "description": "Mettez à jour l'en-tête Cookie de navigateur Delhaize enregistré.",
+        "title": "Mettre à jour l'en-tête Cookie Delhaize"
+      },
+      "credentials": {
+        "data": {
+          "password": "Mot de passe",
+          "username": "Nom d'utilisateur ou e-mail"
+        },
+        "description": "Mettez à jour les identifiants Delhaize. Laissez le mot de passe vide pour conserver le mot de passe actuellement enregistré.",
+        "title": "Mettre à jour les identifiants Delhaize"
+      },
+      "init": {
+        "data": {
+          "auth_update_method": "Mise à jour de l'authentification",
+          "auto_activate_offers": "Activer automatiquement les offres personnelles",
+          "language": "Langue"
+        },
+        "description": "Mettez à jour les paramètres Delhaize. Les champs d'authentification restent masqués sauf si vous choisissez de mettre à jour les identifiants ou l'en-tête Cookie.",
+        "title": "Options Delhaize"
+      },
+      "mfa": {
+        "data": {
+          "otp_code": "Code temporaire reçu par e-mail"
+        },
+        "description": "Saisissez le code temporaire Delhaize envoyé à {otp_target}.",
+        "title": "Vérification Delhaize"
+      }
+    }
+  },
+  "services": {
+    "activate_personal_offers": {
+      "description": "Active les offres personnelles Delhaize disponibles.",
+      "fields": {
+        "entry_id": {
+          "description": "ID d'entrée de configuration Delhaize facultatif. Laissez vide pour activer les offres de tous les comptes.",
+          "name": "Entrée de configuration"
+        }
+      },
+      "name": "Activer les offres personnelles"
+    }
+  }
+}

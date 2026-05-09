@@ -50,14 +50,17 @@ AUTH_METHOD_COOKIE = "cookie"
 AUTH_UPDATE_KEEP = "keep"
 
 AUTH_METHOD_OPTIONS = [
-    {"value": AUTH_METHOD_CREDENTIALS, "label": "Username and password"},
-    {"value": AUTH_METHOD_COOKIE, "label": "Cookie header"},
+    {"value": AUTH_METHOD_COOKIE, "label": "Cookie header (recommended)"},
+    {
+        "value": AUTH_METHOD_CREDENTIALS,
+        "label": "Username and password (may require captcha)",
+    },
 ]
 
 AUTH_UPDATE_OPTIONS = [
     {"value": AUTH_UPDATE_KEEP, "label": "Keep current authentication"},
-    {"value": AUTH_METHOD_CREDENTIALS, "label": "Update username and password"},
     {"value": AUTH_METHOD_COOKIE, "label": "Update Cookie header"},
+    {"value": AUTH_METHOD_CREDENTIALS, "label": "Update username and password"},
 ]
 
 _LOGGER = logging.getLogger(DOMAIN)
@@ -68,16 +71,16 @@ def _user_schema(user_input: dict[str, Any] | None = None) -> vol.Schema:
     defaults = user_input or {}
     return vol.Schema(
         {
+            vol.Required(
+                CONF_AUTH_METHOD,
+                default=defaults.get(CONF_AUTH_METHOD, AUTH_METHOD_COOKIE),
+            ): SelectSelector(SelectSelectorConfig(options=AUTH_METHOD_OPTIONS)),
             vol.Optional(CONF_USERNAME, default=defaults.get(CONF_USERNAME, "")): TextSelector(
                 TextSelectorConfig(type=TextSelectorType.TEXT)
             ),
             vol.Optional(CONF_PASSWORD, default=defaults.get(CONF_PASSWORD, "")): TextSelector(
                 TextSelectorConfig(type=TextSelectorType.PASSWORD)
             ),
-            vol.Required(
-                CONF_AUTH_METHOD,
-                default=defaults.get(CONF_AUTH_METHOD, AUTH_METHOD_CREDENTIALS),
-            ): SelectSelector(SelectSelectorConfig(options=AUTH_METHOD_OPTIONS)),
             vol.Required(
                 CONF_LANGUAGE,
                 default=defaults.get(CONF_LANGUAGE, DEFAULT_LANGUAGE),
@@ -206,6 +209,7 @@ class DelhaizeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return await self.async_step_user(
             {
                 CONF_USERNAME: entry_data.get(CONF_USERNAME, ""),
+                CONF_AUTH_METHOD: AUTH_METHOD_COOKIE,
                 CONF_LANGUAGE: entry_data.get(CONF_LANGUAGE, DEFAULT_LANGUAGE),
                 CONF_AUTO_ACTIVATE_OFFERS: entry_data.get(CONF_AUTO_ACTIVATE_OFFERS, False),
             }

@@ -1,0 +1,104 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Dit Delhaize-account is al geconfigureerd",
+      "mfa_session_expired": "De Delhaize MFA-configuratiesessie is verlopen",
+      "reauth_successful": "Delhaize-herauthenticatie is gelukt",
+      "wrong_account": "Het opgegeven Delhaize-account komt niet overeen met deze configuratievermelding"
+    },
+    "error": {
+      "cannot_connect": "Verbinden met Delhaize is mislukt",
+      "captcha_required": "Delhaize heeft de wachtwoordaanmelding geweigerd omdat een browser-captcha-token vereist is. In dit geval wordt er geen tijdelijke code per e-mail verzonden. Plak een Cookie-header uit een browsersessie waarin je al bent aangemeld.",
+      "login_failed": "Aanmelden mislukt. Controleer de inloggegevens of Cookie-header.",
+      "mfa_required": "Delhaize vereist meervoudige authenticatie, maar gaf geen bruikbaar MFA-token terug.",
+      "missing_auth": "Geef een Cookie-header op of zowel gebruikersnaam als wachtwoord.",
+      "unknown": "Onverwachte Delhaize API-fout"
+    },
+    "step": {
+      "cookie": {
+        "data": {
+          "cookie": "Cookie-header van aangemelde browser"
+        },
+        "description": "Aanbevolen installatiemethode. Plak de Cookie-header uit een Delhaize-browsersessie waarin je al bent aangemeld.",
+        "title": "Delhaize Cookie-header"
+      },
+      "mfa": {
+        "data": {
+          "otp_code": "Tijdelijke code uit e-mail"
+        },
+        "description": "Voer de tijdelijke Delhaize-code in die naar {otp_target} is verzonden.",
+        "title": "Delhaize-verificatie"
+      },
+      "user": {
+        "data": {
+          "auth_method": "Authenticatiemethode",
+          "auto_activate_offers": "Persoonlijke aanbiedingen automatisch activeren",
+          "language": "Taal",
+          "password": "Wachtwoord",
+          "username": "Gebruikersnaam of e-mail"
+        },
+        "description": "Cookie-authenticatie is standaard geselecteerd omdat Delhaize meestal een browser-captcha vereist voordat aanmelden met een e-mailcode kan starten. Laat gebruikersnaam en wachtwoord leeg voor de Cookie-flow. Aanmelden met gebruikersnaam en wachtwoord blijft beschikbaar, maar kan terugvallen op Cookie-authenticatie.",
+        "title": "Delhaize instellen"
+      }
+    }
+  },
+  "options": {
+    "abort": {
+      "mfa_session_expired": "De Delhaize MFA-configuratiesessie is verlopen",
+      "wrong_account": "Het opgegeven Delhaize-account komt niet overeen met deze configuratievermelding"
+    },
+    "error": {
+      "cannot_connect": "Verbinden met Delhaize is mislukt",
+      "captcha_required": "Delhaize heeft de wachtwoordaanmelding geweigerd omdat een browser-captcha-token vereist is. In dit geval wordt er geen tijdelijke code per e-mail verzonden. Plak een Cookie-header uit een browsersessie waarin je al bent aangemeld.",
+      "login_failed": "Aanmelden mislukt. Controleer de inloggegevens of Cookie-header.",
+      "mfa_required": "Delhaize vereist meervoudige authenticatie, maar gaf geen bruikbaar MFA-token terug.",
+      "missing_auth": "Geef zowel gebruikersnaam als wachtwoord op.",
+      "unknown": "Onverwachte Delhaize API-fout"
+    },
+    "step": {
+      "cookie": {
+        "data": {
+          "cookie": "Cookie-header van aangemelde browser"
+        },
+        "description": "Werk de opgeslagen Delhaize Cookie-header van de browser bij.",
+        "title": "Delhaize Cookie-header bijwerken"
+      },
+      "credentials": {
+        "data": {
+          "password": "Wachtwoord",
+          "username": "Gebruikersnaam of e-mail"
+        },
+        "description": "Werk de Delhaize-inloggegevens bij. Laat het wachtwoord leeg om het huidige opgeslagen wachtwoord te behouden.",
+        "title": "Delhaize-inloggegevens bijwerken"
+      },
+      "init": {
+        "data": {
+          "auth_update_method": "Authenticatie bijwerken",
+          "auto_activate_offers": "Persoonlijke aanbiedingen automatisch activeren",
+          "language": "Taal"
+        },
+        "description": "Werk de Delhaize-instellingen bij. Authenticatievelden blijven verborgen, tenzij je ervoor kiest de inloggegevens of Cookie-header bij te werken.",
+        "title": "Delhaize-opties"
+      },
+      "mfa": {
+        "data": {
+          "otp_code": "Tijdelijke code uit e-mail"
+        },
+        "description": "Voer de tijdelijke Delhaize-code in die naar {otp_target} is verzonden.",
+        "title": "Delhaize-verificatie"
+      }
+    }
+  },
+  "services": {
+    "activate_personal_offers": {
+      "description": "Activeer beschikbare persoonlijke aanbiedingen van Delhaize.",
+      "fields": {
+        "entry_id": {
+          "description": "Optionele Delhaize-configuratievermelding-ID. Laat leeg om aanbiedingen voor alle accounts te activeren.",
+          "name": "Configuratievermelding"
+        }
+      },
+      "name": "Persoonlijke aanbiedingen activeren"
+    }
+  }
+}

@@ -19,7 +19,7 @@
         "data": {
           "cookie": "Logged-in browser Cookie header"
         },
-        "description": "Use this fallback only when Delhaize requires captcha or you prefer to reuse an already logged-in browser session.",
+        "description": "Recommended setup path. Paste the Cookie header from an already logged-in Delhaize browser session.",
         "title": "Delhaize Cookie header"
       },
       "mfa": {
@@ -37,7 +37,7 @@
           "password": "Password",
           "username": "Username or email"
         },
-        "description": "Use your Delhaize credentials. If Delhaize accepts the password step and then sends a temporary code by email, Home Assistant will ask for it in the next step. If Delhaize requires a browser captcha token first, use Cookie authentication instead.",
+        "description": "Cookie authentication is selected by default because Delhaize usually requires a browser captcha before the email-code login can start. Leave username and password empty for the Cookie flow. Username and password login remains available, but may fall back to Cookie authentication.",
         "title": "Set up Delhaize"
       }
     }

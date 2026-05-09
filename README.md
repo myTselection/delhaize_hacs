@@ -15,15 +15,6 @@ This integration talks to the same Delhaize GraphQL endpoint used by the website
 <p align="center"><img src="https://raw.githubusercontent.com/myTselection/delhaize_hacs/master/logo.png"/></p>
 
 
-## Authentication
-
-Delhaize currently exposes a website login mutation, but the public login page usually requires captcha before MFA can start. Home Assistant cannot solve Delhaize captcha challenges, so Cookie authentication is the default setup path.
-
-- Logged-in browser Cookie header: recommended and selected by default. Log in to `https://www.delhaize.be/` in a browser, copy the request `Cookie` header from an authenticated request to `/api/v1/`, and paste it into the setup flow.
-- Username and password: optional best-effort path. Home Assistant submits the same website login mutation as Delhaize.be.
-- Email temporary code: only works when Delhaize accepts the password step and then requires MFA. If Delhaize rejects the password step with `captcha_invalid_error`, no email code is sent and Cookie authentication is required.
-
-The integration stores refreshed Delhaize cookies in the Home Assistant config entry so the session can survive restarts as long as Delhaize keeps the session valid.
 
 ## Installation
 
@@ -38,6 +29,19 @@ The integration stores refreshed Delhaize cookies in the Home Assistant config e
   - When the option "Automatically activate personal offers" is enabled and personal offers are detected which haven't been activated yet, these will automatically be activated.
   - The configuration options can still be changed after setup has been completed
 - After setup, use the integration's Configure/Options screen to update language, automatic offer activation, credentials, or the Cookie header.
+
+
+<details><summary><b>Authentication background info</b></summary>
+
+  Delhaize currently exposes a website login mutation, but the public login page usually requires captcha before MFA can start. Home Assistant cannot solve Delhaize captcha challenges, so Cookie authentication is the default setup path.
+
+  - Logged-in browser Cookie header: recommended and selected by default. Log in to `https://www.delhaize.be/` in a browser, copy the request `Cookie` header from an authenticated request to `/api/v1/`, and paste it into the setup flow.
+  - Username and password: optional best-effort path. Home Assistant submits the same website login mutation as Delhaize.be.
+  - Email temporary code: only works when Delhaize accepts the password step and then requires MFA. If Delhaize rejects the password step with `captcha_invalid_error`, no email code is sent and Cookie authentication is required.
+
+  The integration stores refreshed Delhaize cookies in the Home Assistant config entry so the session can survive restarts as long as Delhaize keeps the session valid.
+
+</details>
 
 ## Entities
 

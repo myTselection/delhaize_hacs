@@ -11,7 +11,7 @@
       "captcha_required": "Delhaize heeft de wachtwoordaanmelding geweigerd omdat een browser-captcha-token vereist is. In dit geval wordt er geen tijdelijke code per e-mail verzonden. Plak een Cookie-header uit een browsersessie waarin je al bent aangemeld.",
       "login_failed": "Aanmelden mislukt. Controleer de inloggegevens of Cookie-header.",
       "mfa_required": "Delhaize vereist meervoudige authenticatie, maar gaf geen bruikbaar MFA-token terug.",
-      "missing_auth": "Geef een Cookie-header op of zowel gebruikersnaam als wachtwoord.",
+      "missing_auth": "Geef een Cookie-header van een aangemelde browser op.",
       "unknown": "Onverwachte Delhaize API-fout"
     },
     "step": {
@@ -31,13 +31,11 @@
       },
       "user": {
         "data": {
-          "auth_method": "Authenticatiemethode",
           "auto_activate_offers": "Persoonlijke aanbiedingen automatisch activeren",
-          "language": "Taal",
-          "password": "Wachtwoord",
-          "username": "Gebruikersnaam of e-mail"
+          "cookie": "Cookie-header van aangemelde browser",
+          "language": "Taal"
         },
-        "description": "Cookie-authenticatie is standaard geselecteerd omdat Delhaize meestal een browser-captcha vereist voordat aanmelden met een e-mailcode kan starten. Laat gebruikersnaam en wachtwoord leeg voor de Cookie-flow. Aanmelden met gebruikersnaam en wachtwoord blijft beschikbaar, maar kan terugvallen op Cookie-authenticatie.",
+        "description": "Plak de Cookie-header uit een Delhaize-browsersessie waarin je al bent aangemeld.",
         "title": "Delhaize instellen"
       }
     }
@@ -77,7 +75,7 @@
           "auto_activate_offers": "Persoonlijke aanbiedingen automatisch activeren",
           "language": "Taal"
         },
-        "description": "Werk de Delhaize-instellingen bij. Authenticatievelden blijven verborgen, tenzij je ervoor kiest de inloggegevens of Cookie-header bij te werken.",
+        "description": "Werk de Delhaize-instellingen bij. Authenticatievelden blijven verborgen, tenzij je ervoor kiest de Cookie-header bij te werken.",
         "title": "Delhaize-opties"
       },
       "mfa": {

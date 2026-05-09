@@ -11,7 +11,7 @@
       "captcha_required": "Delhaize a refusé la connexion par mot de passe car un jeton de captcha du navigateur est requis. Aucun code temporaire n'est envoyé par e-mail dans ce cas. Collez un en-tête Cookie provenant d'une session de navigateur déjà connectée.",
       "login_failed": "Échec de la connexion. Vérifiez les identifiants ou l'en-tête Cookie.",
       "mfa_required": "Delhaize exige une authentification multifactorielle, mais n'a pas renvoyé de jeton MFA utilisable.",
-      "missing_auth": "Fournissez soit un en-tête Cookie, soit le nom d'utilisateur et le mot de passe.",
+      "missing_auth": "Fournissez un en-tête Cookie provenant d'un navigateur connecté.",
       "unknown": "Erreur inattendue de l'API Delhaize"
     },
     "step": {
@@ -31,13 +31,11 @@
       },
       "user": {
         "data": {
-          "auth_method": "Méthode d'authentification",
           "auto_activate_offers": "Activer automatiquement les offres personnelles",
-          "language": "Langue",
-          "password": "Mot de passe",
-          "username": "Nom d'utilisateur ou e-mail"
+          "cookie": "En-tête Cookie d'un navigateur connecté",
+          "language": "Langue"
         },
-        "description": "L'authentification par Cookie est sélectionnée par défaut, car Delhaize exige généralement un captcha du navigateur avant que la connexion par code e-mail puisse démarrer. Laissez le nom d'utilisateur et le mot de passe vides pour le flux Cookie. La connexion par nom d'utilisateur et mot de passe reste disponible, mais peut revenir à l'authentification par Cookie.",
+        "description": "Collez l'en-tête Cookie provenant d'une session de navigateur Delhaize déjà connectée.",
         "title": "Configurer Delhaize"
       }
     }
@@ -77,7 +75,7 @@
           "auto_activate_offers": "Activer automatiquement les offres personnelles",
           "language": "Langue"
         },
-        "description": "Mettez à jour les paramètres Delhaize. Les champs d'authentification restent masqués sauf si vous choisissez de mettre à jour les identifiants ou l'en-tête Cookie.",
+        "description": "Mettez à jour les paramètres Delhaize. Les champs d'authentification restent masqués sauf si vous choisissez de mettre à jour l'en-tête Cookie.",
         "title": "Options Delhaize"
       },
       "mfa": {

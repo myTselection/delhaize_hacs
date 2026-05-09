@@ -60,26 +60,21 @@ AUTH_METHOD_OPTIONS = [
 AUTH_UPDATE_OPTIONS = [
     {"value": AUTH_UPDATE_KEEP, "label": "Keep current authentication"},
     {"value": AUTH_METHOD_COOKIE, "label": "Update Cookie header"},
-    {"value": AUTH_METHOD_CREDENTIALS, "label": "Update username and password"},
 ]
 
 _LOGGER = logging.getLogger(DOMAIN)
 
 
 def _user_schema(user_input: dict[str, Any] | None = None) -> vol.Schema:
-    """Return the normal setup schema without the cookie field."""
+    """Return the normal setup schema."""
     defaults = user_input or {}
     return vol.Schema(
         {
             vol.Required(
-                CONF_AUTH_METHOD,
-                default=defaults.get(CONF_AUTH_METHOD, AUTH_METHOD_COOKIE),
-            ): SelectSelector(SelectSelectorConfig(options=AUTH_METHOD_OPTIONS)),
-            vol.Optional(CONF_USERNAME, default=defaults.get(CONF_USERNAME, "")): TextSelector(
+                CONF_COOKIE,
+                default=defaults.get(CONF_COOKIE, ""),
+            ): TextSelector(
                 TextSelectorConfig(type=TextSelectorType.TEXT)
-            ),
-            vol.Optional(CONF_PASSWORD, default=defaults.get(CONF_PASSWORD, "")): TextSelector(
-                TextSelectorConfig(type=TextSelectorType.PASSWORD)
             ),
             vol.Required(
                 CONF_LANGUAGE,
@@ -180,10 +175,6 @@ class DelhaizeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_show_form(step_id="user", data_schema=_user_schema())
 
         data = _clean_input(user_input)
-        if data.get(CONF_AUTH_METHOD) == AUTH_METHOD_COOKIE:
-            self._pending_input = data
-            return self._show_cookie_form()
-
         return await self._async_try_auth(data, step_id="user")
 
     async def async_step_cookie(
@@ -206,13 +197,17 @@ class DelhaizeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if entry_id:
             self._reauth_entry = self.hass.config_entries.async_get_entry(entry_id)
 
-        return await self.async_step_user(
-            {
-                CONF_USERNAME: entry_data.get(CONF_USERNAME, ""),
-                CONF_AUTH_METHOD: AUTH_METHOD_COOKIE,
-                CONF_LANGUAGE: entry_data.get(CONF_LANGUAGE, DEFAULT_LANGUAGE),
-                CONF_AUTO_ACTIVATE_OFFERS: entry_data.get(CONF_AUTO_ACTIVATE_OFFERS, False),
-            }
+        return self.async_show_form(
+            step_id="user",
+            data_schema=_user_schema(
+                {
+                    CONF_LANGUAGE: entry_data.get(CONF_LANGUAGE, DEFAULT_LANGUAGE),
+                    CONF_AUTO_ACTIVATE_OFFERS: entry_data.get(
+                        CONF_AUTO_ACTIVATE_OFFERS,
+                        False,
+                    ),
+                }
+            ),
         )
 
     async def async_step_mfa(

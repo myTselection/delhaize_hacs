@@ -8,9 +8,9 @@
     },
     "error": {
       "cannot_connect": "Verbinden met Delhaize is mislukt",
-      "captcha_required": "Delhaize heeft de wachtwoordaanmelding geweigerd omdat een browser-captcha-token vereist is. In dit geval wordt er geen tijdelijke code per e-mail verzonden. Plak een Cookie-header uit een browsersessie waarin je al bent aangemeld.",
-      "login_failed": "Aanmelden mislukt. Controleer de inloggegevens of Cookie-header.",
-      "mfa_required": "Delhaize vereist meervoudige authenticatie, maar gaf geen bruikbaar MFA-token terug.",
+      "captcha_required": "Delhaize heeft de sessie geweigerd omdat browserverificatie vereist is. Plak een nieuwe Cookie-header uit een browsersessie waarin je al bent aangemeld.",
+      "login_failed": "Aanmelden mislukt. Controleer de Cookie-header.",
+      "mfa_required": "Delhaize vereist extra verificatie. Plak een nieuwe Cookie-header uit een browsersessie waarin je al bent aangemeld.",
       "missing_auth": "Geef een Cookie-header van een aangemelde browser op.",
       "unknown": "Onverwachte Delhaize API-fout"
     },
@@ -47,9 +47,9 @@
     },
     "error": {
       "cannot_connect": "Verbinden met Delhaize is mislukt",
-      "captcha_required": "Delhaize heeft de wachtwoordaanmelding geweigerd omdat een browser-captcha-token vereist is. In dit geval wordt er geen tijdelijke code per e-mail verzonden. Plak een Cookie-header uit een browsersessie waarin je al bent aangemeld.",
-      "login_failed": "Aanmelden mislukt. Controleer de inloggegevens of Cookie-header.",
-      "mfa_required": "Delhaize vereist meervoudige authenticatie, maar gaf geen bruikbaar MFA-token terug.",
+      "captcha_required": "Delhaize heeft de sessie geweigerd omdat browserverificatie vereist is. Plak een nieuwe Cookie-header uit een browsersessie waarin je al bent aangemeld.",
+      "login_failed": "Aanmelden mislukt. Controleer de Cookie-header.",
+      "mfa_required": "Delhaize vereist extra verificatie. Plak een nieuwe Cookie-header uit een browsersessie waarin je al bent aangemeld.",
       "missing_auth": "Geef zowel gebruikersnaam als wachtwoord op.",
       "unknown": "Onverwachte Delhaize API-fout"
     },

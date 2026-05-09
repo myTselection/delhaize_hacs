@@ -8,9 +8,9 @@
     },
     "error": {
       "cannot_connect": "Failed to connect to Delhaize",
-      "captcha_required": "Delhaize rejected the password login because a browser captcha token is required. No temporary email code is sent in this case. Paste a Cookie header from an already logged-in browser session.",
-      "login_failed": "Login failed. Check the credentials or Cookie header.",
-      "mfa_required": "Delhaize requires multi-factor authentication but did not return a usable MFA token.",
+      "captcha_required": "Delhaize rejected the session because browser verification is required. Paste a fresh Cookie header from an already logged-in browser session.",
+      "login_failed": "Login failed. Check the Cookie header.",
+      "mfa_required": "Delhaize requires additional verification. Paste a fresh Cookie header from an already logged-in browser session.",
       "missing_auth": "Provide a logged-in browser Cookie header.",
       "unknown": "Unexpected Delhaize API error"
     },
@@ -47,9 +47,9 @@
     },
     "error": {
       "cannot_connect": "Failed to connect to Delhaize",
-      "captcha_required": "Delhaize rejected the password login because a browser captcha token is required. No temporary email code is sent in this case. Paste a Cookie header from an already logged-in browser session.",
-      "login_failed": "Login failed. Check the credentials or Cookie header.",
-      "mfa_required": "Delhaize requires multi-factor authentication but did not return a usable MFA token.",
+      "captcha_required": "Delhaize rejected the session because browser verification is required. Paste a fresh Cookie header from an already logged-in browser session.",
+      "login_failed": "Login failed. Check the Cookie header.",
+      "mfa_required": "Delhaize requires additional verification. Paste a fresh Cookie header from an already logged-in browser session.",
       "missing_auth": "Provide both username and password.",
       "unknown": "Unexpected Delhaize API error"
     },

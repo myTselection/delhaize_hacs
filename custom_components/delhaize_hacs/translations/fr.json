@@ -8,9 +8,9 @@
     },
     "error": {
       "cannot_connect": "Échec de la connexion à Delhaize",
-      "captcha_required": "Delhaize a refusé la connexion par mot de passe car un jeton de captcha du navigateur est requis. Aucun code temporaire n'est envoyé par e-mail dans ce cas. Collez un en-tête Cookie provenant d'une session de navigateur déjà connectée.",
-      "login_failed": "Échec de la connexion. Vérifiez les identifiants ou l'en-tête Cookie.",
-      "mfa_required": "Delhaize exige une authentification multifactorielle, mais n'a pas renvoyé de jeton MFA utilisable.",
+      "captcha_required": "Delhaize a refusé la session car une vérification dans le navigateur est requise. Collez un nouvel en-tête Cookie provenant d'une session de navigateur déjà connectée.",
+      "login_failed": "Échec de la connexion. Vérifiez l'en-tête Cookie.",
+      "mfa_required": "Delhaize exige une vérification supplémentaire. Collez un nouvel en-tête Cookie provenant d'une session de navigateur déjà connectée.",
       "missing_auth": "Fournissez un en-tête Cookie provenant d'un navigateur connecté.",
       "unknown": "Erreur inattendue de l'API Delhaize"
     },
@@ -47,9 +47,9 @@
     },
     "error": {
       "cannot_connect": "Échec de la connexion à Delhaize",
-      "captcha_required": "Delhaize a refusé la connexion par mot de passe car un jeton de captcha du navigateur est requis. Aucun code temporaire n'est envoyé par e-mail dans ce cas. Collez un en-tête Cookie provenant d'une session de navigateur déjà connectée.",
-      "login_failed": "Échec de la connexion. Vérifiez les identifiants ou l'en-tête Cookie.",
-      "mfa_required": "Delhaize exige une authentification multifactorielle, mais n'a pas renvoyé de jeton MFA utilisable.",
+      "captcha_required": "Delhaize a refusé la session car une vérification dans le navigateur est requise. Collez un nouvel en-tête Cookie provenant d'une session de navigateur déjà connectée.",
+      "login_failed": "Échec de la connexion. Vérifiez l'en-tête Cookie.",
+      "mfa_required": "Delhaize exige une vérification supplémentaire. Collez un nouvel en-tête Cookie provenant d'une session de navigateur déjà connectée.",
       "missing_auth": "Fournissez le nom d'utilisateur et le mot de passe.",
       "unknown": "Erreur inattendue de l'API Delhaize"
     },

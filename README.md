@@ -23,10 +23,17 @@ This integration talks to the same Delhaize GraphQL endpoint used by the website
 - Restart Home Assistant.
 - Add the `Delhaize` integration from Settings > Devices and services.
 - <img src="https://raw.githubusercontent.com/myTselection/delhaize_hacs/master/setup.png"/>
-- The cookie header input will be requested. Open a separate browser and login in on the site https://www.delhaize.be/my-account/dashboard, after login, open the Developer Tools of the browser (F12) and select 'Network' tab. Select a connection loaded from "https://www.delhaize.be/api/v1/..." and search for the "Request Headers" > "Cookie". Copy and paste the full "Cookie" value into the Home Assistant "cookie" field. This will allow Home Assistant to re-use the authenticated browser session.
-  - <img src="https://raw.githubusercontent.com/myTselection/delhaize_hacs/master/cookiefrombrowser.png"/>
-  - When the option "Automatically activate personal offers" is enabled and personal offers are detected which haven't been activated yet, these will automatically be activated.
-  - The configuration options can still be changed after setup has been completed
+- The cookie header input will be requested.
+   - Open a separate browser and login in on the site https://www.delhaize.be/my-account/dashboard,
+   - Login in the browser, if needed with email temporary code confirmation
+   - Open the Developer Tools of the browser (F12) and select 'Network' tab.
+   - Navigate to the user profile on the Delhaize site
+   - In the DevTool Network Tab, select a connection loaded from "https://www.delhaize.be/api/v1/..." and search for the "Request Headers" > "Cookie".
+   - Copy and paste the full "Cookie" value into the Home Assistant "cookie" field. This will allow Home Assistant to re-use the authenticated browser session.
+   - <img src="https://raw.githubusercontent.com/myTselection/delhaize_hacs/master/cookiefrombrowser.png"/>
+- When the option "Automatically activate personal offers" is enabled and personal offers are detected which haven't been activated yet, these will automatically be activated.
+   - This will make sure all personal offers are immediately available to you    
+- The configuration options can still be changed after setup has been completed
 - After setup, use the integration's Configure/Options screen to update language, automatic offer activation, credentials, or the Cookie header.
 
 

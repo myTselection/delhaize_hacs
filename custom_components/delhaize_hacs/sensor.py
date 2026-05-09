@@ -70,8 +70,7 @@ SENSOR_DESCRIPTIONS: tuple[DelhaizeSensorEntityDescription, ...] = (
         value_fn=lambda data: _available_offers(data),
         attr_fn=lambda data: _without_none(
             {
-                "total": _nested(data, "personal_offers_count", "totalCount"),
-                "activated": _nested(data, "personal_offers_count", "activatedCount"),
+                **_offer_count_attributes(data),
                 "activation_result": data.get("activation_result"),
                 "activation_error": data.get("activation_error"),
                 "activation_refresh_error": data.get("activation_refresh_error"),
@@ -82,13 +81,15 @@ SENSOR_DESCRIPTIONS: tuple[DelhaizeSensorEntityDescription, ...] = (
         key="personal_offers_total",
         name="Personal offers total",
         icon="mdi:ticket-confirmation-outline",
-        value_fn=lambda data: _nested(data, "personal_offers_count", "totalCount"),
+        value_fn=lambda data: _total_offers(data),
+        attr_fn=lambda data: _offer_count_attributes(data),
     ),
     DelhaizeSensorEntityDescription(
         key="personal_offers_activated",
         name="Personal offers activated",
         icon="mdi:offer",
-        value_fn=lambda data: _nested(data, "personal_offers_count", "activatedCount"),
+        value_fn=lambda data: _activated_offers(data),
+        attr_fn=lambda data: _offer_count_attributes(data),
     ),
     DelhaizeSensorEntityDescription(
         key="personal_offers_benefit",
@@ -201,10 +202,98 @@ def _nested(data: dict[str, Any], *path: str) -> Any:
 
 def _available_offers(data: dict[str, Any]) -> int | None:
     """Return number of inactive personal offers."""
-    total = _nested(data, "personal_offers_count", "totalCount")
-    activated = _nested(data, "personal_offers_count", "activatedCount")
+    offers = _visible_personal_offers(data)
+    if offers is not None:
+        return sum(1 for offer in offers if offer.get("active") is False)
+
+    total = _total_offers(data)
+    activated = _activated_offers(data)
+    if total is None or activated is None:
+        return None
+    return max(0, total - activated)
+
+
+def _total_offers(data: dict[str, Any]) -> int | None:
+    """Return the number of personal offers shown by the website when available."""
+    offers = _visible_personal_offers(data)
+    if offers is not None:
+        return len(offers)
+    return _int_or_none(_nested(data, "personal_offers_count", "totalCount"))
+
+
+def _activated_offers(data: dict[str, Any]) -> int | None:
+    """Return the number of activated personal offers."""
+    offers = _visible_personal_offers(data)
+    if offers is not None:
+        return sum(1 for offer in offers if offer.get("active") is True)
+    return _int_or_none(_nested(data, "personal_offers_count", "activatedCount"))
+
+
+def _offer_count_attributes(data: dict[str, Any]) -> dict[str, Any]:
+    """Return diagnostic attributes for personal offer count differences."""
+    offer_list = _personal_offer_list(data)
+    visible_offers = _visible_personal_offers(data)
+    total = _total_offers(data)
+    activated = _activated_offers(data)
+    api_total = _int_or_none(_nested(data, "personal_offers_count", "totalCount"))
+    api_activated = _int_or_none(_nested(data, "personal_offers_count", "activatedCount"))
+    attributes: dict[str, Any] = {
+        "count_source": (
+            "personal_offer_list" if visible_offers is not None else "personal_offers_count"
+        ),
+        "total": total,
+        "activated": activated,
+        "available": _available_offers(data),
+        "api_total": api_total,
+        "api_activated": api_activated,
+        "api_total_delta": (
+            api_total - total if api_total is not None and total is not None else None
+        ),
+        "api_activated_delta": (
+            api_activated - activated
+            if api_activated is not None and activated is not None
+            else None
+        ),
+    }
+
+    if offer_list is not None and visible_offers is not None:
+        attributes.update(
+            {
+                "listed_total": len(offer_list),
+                "listed_visible": len(visible_offers),
+                "listed_activated": sum(
+                    1 for offer in visible_offers if offer.get("active") is True
+                ),
+                "listed_available": sum(
+                    1 for offer in visible_offers if offer.get("active") is False
+                ),
+                "hidden_redeemed": len(offer_list) - len(visible_offers),
+            }
+        )
+
+    return _without_none(attributes)
+
+
+def _visible_personal_offers(data: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """Return personal offers that should be visible in the website offer list."""
+    offers = _personal_offer_list(data)
+    if offers is None:
+        return None
+    return [offer for offer in offers if offer.get("offerRedeemed") is not True]
+
+
+def _personal_offer_list(data: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """Return the detailed personal offer list when available."""
+    offers = _nested(data, "personal_offers", "personalOfferList")
+    if not isinstance(offers, list):
+        return None
+    return [offer for offer in offers if isinstance(offer, dict)]
+
+
+def _int_or_none(value: Any) -> int | None:
+    """Return a value as int when possible."""
     try:
-        return max(0, int(total or 0) - int(activated or 0))
+        return int(value)
     except (TypeError, ValueError):
         return None
 

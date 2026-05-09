@@ -31,8 +31,10 @@ The integration stores refreshed Delhaize cookies in the Home Assistant config e
    -    [![Open your Home Assistant instance and open the repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg?style=flat-square)](https://my.home-assistant.io/redirect/hacs_repository/?owner=myTselection&repository=delhaize_hacs&category=integration)
 - Restart Home Assistant.
 - Add the `Delhaize` integration from Settings > Devices and services.
-- Use the default Cookie header flow, or choose username/password as a secondary login attempt.
+- Use the default Cookie header flow, enter username and password.
   - <img src="https://raw.githubusercontent.com/myTselection/delhaize_hacs/master/setup.png"/>
+  - In the next screen of the flow, the cookie header input will be requested. Open a separate browser and login in on the site https://www.delhaize.be/my-account/dashboard, after login, open the Developer Tools of the browser (F12) and select 'Network' tab. Select a connection loaded from "https://www.delhaize.be/api/v1/..." and search for the "Request Headers" > "Cookie". Copy and paste the full "Cookie" value into the Home Assistant "cookie" field. This will allow Home Assistant to re-use the authenticated browser session.
+  - <img src="https://raw.githubusercontent.com/myTselection/delhaize_hacs/master/cookiefrombrowser.png"/>
   - When the option "Automatically activate personal offers" is enabled and personal offers are detected which haven't been activated yet, these will automatically be activated.
   - The configuration options can still be changed after setup has been completed
 - After setup, use the integration's Configure/Options screen to update language, automatic offer activation, credentials, or the Cookie header.

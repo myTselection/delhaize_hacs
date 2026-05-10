@@ -1,6 +1,6 @@
 [![HACS Default](https://img.shields.io/badge/HACS-Default-blue.svg)](https://github.com/hacs/default)
-[![GitHub release](https://img.shields.io/github/release/myTselection/delhaize_hacs.svg)](https://github.com/myTselection/delhaize_hacs/releases)
-![GitHub repo size](https://img.shields.io/github/repo-size/myTselection/delhaize_hacs.svg)
+[![GitHub release](https://img.shields.io/github/release/myTselection/delhaize_ha.svg)](https://github.com/myTselection/delhaize_ha/releases)
+![GitHub repo size](https://img.shields.io/github/repo-size/myTselection/delhaize_ha.svg)
 
 # Delhaize Home Assistant integration
 
@@ -12,17 +12,17 @@ This integration talks to the same Delhaize GraphQL endpoint used by the website
 | -------------------------------------------------------------------------------------------------------------------- |
 
 
-<p align="center"><img src="https://raw.githubusercontent.com/myTselection/delhaize_hacs/master/logo.png"/></p>
+<p align="center"><img src="https://raw.githubusercontent.com/myTselection/delhaize_ha/master/logo.png"/></p>
 
 
 
 ## Installation
 
-- [HACS](https://hacs.xyz/): search for delhaize_hacs in the default HACS repo list or use below button to navigate directly to it on your local system and install via HACS. 
-   -    [![Open your Home Assistant instance and open the repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg?style=flat-square)](https://my.home-assistant.io/redirect/hacs_repository/?owner=myTselection&repository=delhaize_hacs&category=integration)
+- [HACS](https://hacs.xyz/): search for delhaize_ha in the default HACS repo list or use below button to navigate directly to it on your local system and install via HACS. 
+   -    [![Open your Home Assistant instance and open the repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg?style=flat-square)](https://my.home-assistant.io/redirect/hacs_repository/?owner=myTselection&repository=delhaize_ha&category=integration)
 - Restart Home Assistant.
 - Add the `Delhaize` integration from Settings > Devices and services.
-- <img src="https://raw.githubusercontent.com/myTselection/delhaize_hacs/master/setup.png"/>
+- <img src="https://raw.githubusercontent.com/myTselection/delhaize_ha/master/setup.png"/>
 - The cookie header input will be requested.
    - Open a separate browser and login in on the site https://www.delhaize.be/my-account/dashboard,
    - Login in the browser, if needed with email temporary code confirmation
@@ -30,7 +30,7 @@ This integration talks to the same Delhaize GraphQL endpoint used by the website
    - Navigate to the user profile on the Delhaize site
    - In the DevTool Network Tab, select a connection loaded from "https://www.delhaize.be/api/v1/..." and search for the "Request Headers" > "Cookie".
    - Copy and paste the full "Cookie" value into the Home Assistant "cookie" field. This will allow Home Assistant to re-use the authenticated browser session.
-   - <img src="https://raw.githubusercontent.com/myTselection/delhaize_hacs/master/cookiefrombrowser.png"/>
+   - <img src="https://raw.githubusercontent.com/myTselection/delhaize_ha/master/cookiefrombrowser.png"/>
 - When the option "Automatically activate personal offers" is enabled and personal offers are detected which haven't been activated yet, these will automatically be activated.
    - This will make sure all personal offers are immediately available to you    
 - The configuration options can still be changed after setup has been completed
@@ -62,11 +62,11 @@ The integration creates sensors for:
 - Loyalty profile
 - Account
 
-<p align="center"><img src="https://raw.githubusercontent.com/myTselection/delhaize_hacs/master/sensors.png"/></p>
+<p align="center"><img src="https://raw.githubusercontent.com/myTselection/delhaize_ha/master/sensors.png"/></p>
 
 ## Services
 
-`delhaize_hacs.activate_personal_offers`
+`delhaize_ha.activate_personal_offers`
 
 Activates available personal offers for all configured accounts, or for a specific config entry when `entry_id` is provided.
 
@@ -78,7 +78,7 @@ Add this to `configuration.yaml` when troubleshooting:
 logger:
   default: info
   logs:
-    custom_components.delhaize_hacs: debug
+    custom_components.delhaize_ha: debug
 ```
 
 ## Status

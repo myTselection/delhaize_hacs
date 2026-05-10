@@ -4,9 +4,9 @@
 
 # Delhaize Home Assistant integration
 
-Home Assistant custom integration for Delhaize SuperPlus market loyalty points: savings, loyalty points, and personal e-Deals.
+Home Assistant custom integration for [Delhaize](https://www.delhaize.be/) SuperPlus market loyalty points: savings, loyalty points, and personal e-Deals.
 
-The integration provides an overview of your Delhaize personal profile: number of points, amount saved and information on personal promo's. The personal promo's can be auto activated as soon as they become available.
+The integration provides an overview of your [Delhaize personal profile](https://www.delhaize.be/login): number of points, amount saved and information on personal promo's. The personal promo's can be auto activated as soon as they become available.
 
 This integration talks to the same Delhaize GraphQL endpoint used by the website (`https://www.delhaize.be/api/v1/`). It is not affiliated with Delhaize. Most of it has been created by ChatGPT Codex.
 

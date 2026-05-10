@@ -2,7 +2,7 @@
 
 from datetime import timedelta
 
-DOMAIN = "delhaize_hacs"
+DOMAIN = "delhaize_ha"
 NAME = "Delhaize"
 
 API_URL = "https://www.delhaize.be/api/v1/"

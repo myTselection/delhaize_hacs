@@ -15,6 +15,8 @@ from ..const import API_URL, BASE_URL, DEFAULT_LANGUAGE
 
 _LOGGER = logging.getLogger(__name__)
 
+TOKEN_REFRESH_ERROR_CODE = "PENDING_TOKEN_REFRESH"
+
 LOGIN_MUTATION = """
 mutation Login(
   $username: String!
@@ -223,6 +225,10 @@ class DelhaizeMfaRequired(DelhaizeAuthError):
         super().__init__(message, errors=errors)
         self.mfa_token = mfa_token
         self.mfa_purpose = mfa_purpose
+
+
+class DelhaizeTokenRefreshRequired(DelhaizeAuthError):
+    """Raised when Delhaize asks the client to refresh auth cookies."""
 
 
 class DelhaizeApi:
@@ -618,6 +624,9 @@ class DelhaizeApi:
         if "captcha" in text or "recaptcha" in text:
             raise DelhaizeCaptchaRequired(combined, errors=errors)
 
+        if _has_error_code(errors, TOKEN_REFRESH_ERROR_CODE):
+            raise DelhaizeTokenRefreshRequired(combined, errors=errors)
+
         if (
             "forbidden" in text
             or "unauthorized" in text
@@ -674,6 +683,16 @@ def _error_codes(errors: list[dict[str, Any]]) -> list[str]:
             if value is not None:
                 codes.append(str(value))
     return codes
+
+
+def _has_error_code(errors: list[dict[str, Any]], code: str) -> bool:
+    """Return whether a GraphQL error has the given extension code."""
+    expected = code.upper()
+    return any(
+        str((error.get("extensions") or {}).get("code") or error.get("code")).upper()
+        == expected
+        for error in errors
+    )
 
 
 def summarize_graphql_errors(errors: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -740,5 +759,6 @@ __all__ = [
     "DelhaizeCaptchaRequired",
     "DelhaizeMfaRequired",
     "DelhaizeRequestError",
+    "DelhaizeTokenRefreshRequired",
     "summarize_graphql_errors",
 ]

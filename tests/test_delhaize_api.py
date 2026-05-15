@@ -16,7 +16,7 @@ def _load_delhaize_api() -> types.ModuleType:
     """Load the API module without importing the Home Assistant integration package."""
     root = Path(__file__).resolve().parents[1]
     custom_components_path = root / "custom_components"
-    integration_path = custom_components_path / "delhaize_hacs"
+    integration_path = custom_components_path / "delhaize_ha"
 
     custom_components = sys.modules.setdefault(
         "custom_components",
@@ -24,12 +24,12 @@ def _load_delhaize_api() -> types.ModuleType:
     )
     custom_components.__path__ = [str(custom_components_path)]
 
-    package = types.ModuleType("custom_components.delhaize_hacs")
+    package = types.ModuleType("custom_components.delhaize_ha")
     package.__path__ = [str(integration_path)]
-    sys.modules["custom_components.delhaize_hacs"] = package
+    sys.modules["custom_components.delhaize_ha"] = package
 
     spec = importlib.util.spec_from_file_location(
-        "custom_components.delhaize_hacs.delhaizeApi",
+        "custom_components.delhaize_ha.delhaizeApi",
         integration_path / "delhaizeApi" / "__init__.py",
     )
     assert spec and spec.loader
@@ -39,7 +39,9 @@ def _load_delhaize_api() -> types.ModuleType:
     return module
 
 
-DelhaizeApi = _load_delhaize_api().DelhaizeApi
+delhaize_api = _load_delhaize_api()
+DelhaizeApi = delhaize_api.DelhaizeApi
+DelhaizeTokenRefreshRequired = delhaize_api.DelhaizeTokenRefreshRequired
 
 
 def test_validate_session_refreshes_pending_token_and_retries() -> None:
@@ -86,6 +88,72 @@ def test_validate_session_refreshes_pending_token_and_retries() -> None:
         ]
         assert session.requests[1]["headers"]["x-do-refresh-token"] == "true"
         assert "session=new-session" in api.get_cookie_header()
+
+    asyncio.run(run_test())
+
+
+def test_graphql_refreshes_access_token_expired_and_retries_operation() -> None:
+    """Delhaize sometimes reports token expiry as a plain error message."""
+
+    async def run_test() -> None:
+        session = FakeSession(
+            [
+                FakeResponse({"errors": [{"message": "Access token expired"}]}),
+                FakeResponse(
+                    {"data": {"refreshCustomerAuthCookies": True}},
+                    cookies={"session": "new-session"},
+                ),
+                FakeResponse(
+                    {
+                        "data": {
+                            "loyaltyPoints": {"pointsBalance": 42},
+                            "nutriscoreBalance": {},
+                            "savings": {},
+                        }
+                    }
+                ),
+            ]
+        )
+        api = DelhaizeApi(session, cookie_header="session=old-session")
+
+        details = await api.get_loyalty_details()
+
+        assert details["loyaltyPoints"]["pointsBalance"] == 42
+        assert [request["operation"] for request in session.requests] == [
+            "getIbizaAccountDetails",
+            "RefreshCustomerToken",
+            "getIbizaAccountDetails",
+        ]
+        assert session.requests[1]["headers"]["x-do-refresh-token"] == "true"
+        assert "session=new-session" in session.requests[2]["headers"]["Cookie"]
+        assert "session=new-session" in api.get_cookie_header()
+
+    asyncio.run(run_test())
+
+
+def test_refresh_operation_does_not_loop_on_expired_token() -> None:
+    """A failed refresh should surface instead of retrying refresh recursively."""
+
+    async def run_test() -> None:
+        session = FakeSession(
+            [
+                FakeResponse({"errors": [{"message": "Access token expired"}]}),
+                FakeResponse({"errors": [{"message": "Access token expired"}]}),
+            ]
+        )
+        api = DelhaizeApi(session, cookie_header="session=old-session")
+
+        try:
+            await api.get_loyalty_details()
+        except DelhaizeTokenRefreshRequired:
+            pass
+        else:
+            raise AssertionError("Expected token refresh failure to be raised")
+
+        assert [request["operation"] for request in session.requests] == [
+            "getIbizaAccountDetails",
+            "RefreshCustomerToken",
+        ]
 
     asyncio.run(run_test())
 

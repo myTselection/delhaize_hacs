@@ -375,6 +375,7 @@ class DelhaizeApi:
             "RefreshCustomerToken",
             REFRESH_CUSTOMER_TOKEN_MUTATION,
             extra_headers={"x-do-refresh-token": "true"},
+            allow_token_refresh=False,
         )
         return bool(data.get("refreshCustomerAuthCookies"))
 
@@ -492,8 +493,41 @@ class DelhaizeApi:
         *,
         variables: dict[str, Any] | None = None,
         extra_headers: dict[str, str] | None = None,
+        allow_token_refresh: bool = True,
     ) -> dict[str, Any]:
         """Execute a GraphQL operation."""
+        try:
+            return await self._graphql(
+                operation_name,
+                query,
+                variables=variables,
+                extra_headers=extra_headers,
+            )
+        except DelhaizeTokenRefreshRequired:
+            if not allow_token_refresh or not self.get_cookie_header():
+                raise
+
+            _LOGGER.debug(
+                "Delhaize access token expired for %s; refreshing cookies and retrying once",
+                operation_name,
+            )
+            await self.refresh_customer_auth_cookies()
+            return await self._graphql(
+                operation_name,
+                query,
+                variables=variables,
+                extra_headers=extra_headers,
+            )
+
+    async def _graphql(
+        self,
+        operation_name: str,
+        query: str,
+        *,
+        variables: dict[str, Any] | None = None,
+        extra_headers: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Execute one GraphQL HTTP request."""
         payload = {
             "operationName": operation_name,
             "variables": variables or {},
@@ -628,6 +662,13 @@ class DelhaizeApi:
             raise DelhaizeTokenRefreshRequired(combined, errors=errors)
 
         if (
+            _is_token_expired_error(text)
+            or _has_error_code(errors, "TOKEN_EXPIRED")
+            or _has_error_code(errors, "ACCESS_TOKEN_EXPIRED")
+        ):
+            raise DelhaizeTokenRefreshRequired(combined, errors=errors)
+
+        if (
             "forbidden" in text
             or "unauthorized" in text
             or "anonymous user" in text
@@ -692,6 +733,15 @@ def _has_error_code(errors: list[dict[str, Any]], code: str) -> bool:
         str((error.get("extensions") or {}).get("code") or error.get("code")).upper()
         == expected
         for error in errors
+    )
+
+
+def _is_token_expired_error(text: str) -> bool:
+    """Return whether GraphQL error text describes an expired auth token."""
+    return (
+        ("token" in text and "expired" in text)
+        or "jwt expired" in text
+        or "access token expired" in text
     )
 
 

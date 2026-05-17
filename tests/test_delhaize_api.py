@@ -131,6 +131,45 @@ def test_graphql_refreshes_access_token_expired_and_retries_operation() -> None:
     asyncio.run(run_test())
 
 
+def test_graphql_refreshes_invalid_access_token_and_retries_operation() -> None:
+    """Delhaize can report stale auth cookies as an invalid access token."""
+
+    async def run_test() -> None:
+        session = FakeSession(
+            [
+                FakeResponse({"errors": [{"message": "Invalid access token"}]}),
+                FakeResponse(
+                    {"data": {"refreshCustomerAuthCookies": True}},
+                    cookies={"session": "new-session"},
+                ),
+                FakeResponse(
+                    {
+                        "data": {
+                            "loyaltyPoints": {"pointsBalance": 42},
+                            "nutriscoreBalance": {},
+                            "savings": {},
+                        }
+                    }
+                ),
+            ]
+        )
+        api = DelhaizeApi(session, cookie_header="session=old-session")
+
+        details = await api.get_loyalty_details()
+
+        assert details["loyaltyPoints"]["pointsBalance"] == 42
+        assert [request["operation"] for request in session.requests] == [
+            "getIbizaAccountDetails",
+            "RefreshCustomerToken",
+            "getIbizaAccountDetails",
+        ]
+        assert session.requests[1]["headers"]["x-do-refresh-token"] == "true"
+        assert "session=new-session" in session.requests[2]["headers"]["Cookie"]
+        assert "session=new-session" in api.get_cookie_header()
+
+    asyncio.run(run_test())
+
+
 def test_refresh_operation_does_not_loop_on_expired_token() -> None:
     """A failed refresh should surface instead of retrying refresh recursively."""
 
@@ -139,6 +178,33 @@ def test_refresh_operation_does_not_loop_on_expired_token() -> None:
             [
                 FakeResponse({"errors": [{"message": "Access token expired"}]}),
                 FakeResponse({"errors": [{"message": "Access token expired"}]}),
+            ]
+        )
+        api = DelhaizeApi(session, cookie_header="session=old-session")
+
+        try:
+            await api.get_loyalty_details()
+        except DelhaizeTokenRefreshRequired:
+            pass
+        else:
+            raise AssertionError("Expected token refresh failure to be raised")
+
+        assert [request["operation"] for request in session.requests] == [
+            "getIbizaAccountDetails",
+            "RefreshCustomerToken",
+        ]
+
+    asyncio.run(run_test())
+
+
+def test_refresh_operation_does_not_loop_on_invalid_access_token() -> None:
+    """A failed invalid-token refresh should surface without recursive refresh."""
+
+    async def run_test() -> None:
+        session = FakeSession(
+            [
+                FakeResponse({"errors": [{"message": "Invalid access token"}]}),
+                FakeResponse({"errors": [{"message": "Invalid access token"}]}),
             ]
         )
         api = DelhaizeApi(session, cookie_header="session=old-session")

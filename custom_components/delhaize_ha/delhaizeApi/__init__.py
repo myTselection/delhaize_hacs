@@ -737,11 +737,12 @@ def _has_error_code(errors: list[dict[str, Any]], code: str) -> bool:
 
 
 def _is_token_expired_error(text: str) -> bool:
-    """Return whether GraphQL error text describes an expired auth token."""
+    """Return whether GraphQL error text describes a stale auth token."""
     return (
         ("token" in text and "expired" in text)
         or "jwt expired" in text
         or "access token expired" in text
+        or "invalid access token" in text
     )
 
 

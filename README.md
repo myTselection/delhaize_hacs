@@ -62,6 +62,7 @@ The integration creates sensors for:
 - Personal offers activated
 - Personal offers benefit
 - Loyalty profile
+- Loyalty card number
 - Account
 
 <p align="center"><img src="https://raw.githubusercontent.com/myTselection/delhaize_ha/master/sensors.png"/></p>

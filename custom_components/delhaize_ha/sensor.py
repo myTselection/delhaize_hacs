@@ -122,6 +122,12 @@ SENSOR_DESCRIPTIONS: tuple[DelhaizeSensorEntityDescription, ...] = (
         value_fn=lambda data: _nested(data, "customer", "ibizaLoyaltyProfile"),
     ),
     DelhaizeSensorEntityDescription(
+        key="loyalty_card_number",
+        name="Loyalty card number",
+        icon="mdi:card-account-details-outline",
+        value_fn=lambda data: _nested(data, "customer", "diplaCard"),
+    ),
+    DelhaizeSensorEntityDescription(
         key="account",
         name="Account",
         icon="mdi:account-circle-outline",
